@@ -175,13 +175,18 @@ var (
 	}
 )
 
-// loWord / hiWord extract mouse coordinates from lParam.
+// loWord extracts the low-order 16-bit signed value from an lParam, typically representing the X coordinate of a mouse message.
+// It returns that value as an int.
 func loWord(l uintptr) int { return int(int16(l & 0xFFFF)) }
+// hiWord extracts the high-order 16 bits of l and returns them as a signed int (sign-extended from 16 bits).
 func hiWord(l uintptr) int { return int(int16((l >> 16) & 0xFFFF)) }
 
 // ---------------------------------------------------------------------------
 // wndProc – handles paint, mouse, and keyboard events.
-// ---------------------------------------------------------------------------
+// wndProc handles Win32 messages for the overlay window, processing cursor updates,
+// painting, mouse input to drive the selection lifecycle, keyboard cancellation, and
+// window teardown.
+// For messages it does not handle, it delegates to DefWindowProcW and returns that result.
 
 func wndProc(hwnd, msg, wParam, lParam uintptr) uintptr {
 	switch msg {
@@ -244,7 +249,7 @@ func wndProc(hwnd, msg, wParam, lParam uintptr) uintptr {
 }
 
 // paintOverlay renders the dimmed screenshot, then composites the bright
-// selection rectangle and draws a border around it.
+// hdc is a Win32 device context handle where the overlay will be drawn.
 func paintOverlay(hdc uintptr) {
 	if ovState.dimmed == nil {
 		return
@@ -311,6 +316,7 @@ func paintOverlay(hdc uintptr) {
 	}
 }
 
+// nullBrushHandle returns a handle to the stock NULL_BRUSH GDI object.
 func nullBrushHandle() uintptr {
 	h, _, _ := procGetStockObject.Call(nullBrush)
 	return h
@@ -318,7 +324,14 @@ func nullBrushHandle() uintptr {
 
 // ---------------------------------------------------------------------------
 // showPlatform — Win32 overlay entry point
-// ---------------------------------------------------------------------------
+// showPlatform displays a fullscreen overlay on the specified monitor that lets the user select a rectangular region.
+// 
+// showPlatform pins the goroutine to the OS thread, captures the given monitor's screen, presents a topmost
+// fullscreen overlay window that accepts mouse and keyboard input to create or cancel a selection, and runs a
+// Win32 message loop until the overlay is dismissed. It returns the final selection Result (with Cancelled set
+// when the user aborts) or an error if setup (capture, monitor info, or window creation) fails.
+//
+// monitor is the index of the monitor to capture and display the overlay for.
 
 func showPlatform(monitor int) (*Result, error) {
 	// Pin to the OS thread since Win32 window messages are thread-local.

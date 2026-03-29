@@ -22,6 +22,13 @@ import (
 // Version is the application version, set at build time via ldflags.
 var Version = "0.2.0"
 
+// main is the entry point for the screensaver CLI.
+// It parses command-line flags and dispatches the selected mode:
+// - --version: prints the build-time Version and exits.
+// - --select: shows an interactive fullscreen region selector and captures the chosen area.
+// - --once: captures a full-screen screenshot once.
+// - default: starts daemon mode which registers a global hotkey (configurable via --hotkey).
+// The --output flag, when provided with --once or --select, saves the captured image to the given path.
 func main() {
 	once := flag.Bool("once", false, "Capture one screenshot and exit (no background daemon)")
 	sel := flag.Bool("select", false, "Interactive region selection: dims the screen and lets you drag a rectangle")
@@ -48,7 +55,9 @@ func main() {
 	runDaemon(*hotkey)
 }
 
-// runOnce captures a full-screen screenshot and saves or copies it.
+// runOnce captures a full-screen screenshot and saves it to outputPath or copies it to the clipboard.
+// If outputPath is non-empty the image is written there; otherwise the image is copied to the clipboard.
+// On error it writes a message to stderr and exits the process with status 1.
 func runOnce(outputPath string) {
 	img, err := capture.FullScreen(0)
 	if err != nil {
@@ -74,7 +83,12 @@ func runOnce(outputPath string) {
 }
 
 // runSelect shows the fullscreen selection overlay, lets the user draw
-// a rubber-band rectangle, and then captures the selected region.
+// runSelect displays a fullscreen region-selection overlay, captures the selected area,
+// and either saves the resulting image to outputPath or copies it to the clipboard.
+// If outputPath is non-empty the image is written to that path; otherwise it is copied
+// to the clipboard. If the user cancels selection the function returns without
+// producing an image; on capture, save, or clipboard errors the process prints an
+// error to stderr and exits with status 1.
 func runSelect(outputPath string) {
 	result, err := overlay.Show(0)
 	if err != nil {
@@ -115,7 +129,9 @@ func runSelect(outputPath string) {
 	fmt.Println("Region screenshot copied to clipboard")
 }
 
-// runDaemon starts the background hotkey listener and system tray.
+// runDaemon prints user-facing daemon-mode instructions and the configured hotkey.
+// The function does not start any GUI, hotkey listener, or tray; those platform-specific
+// components are implemented elsewhere and must run in a GUI environment.
 func runDaemon(hotkey string) {
 	fmt.Printf("[screensaver] Running in the background.\n")
 	fmt.Printf("  Press %s to take a screenshot.\n", hotkey)
