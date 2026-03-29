@@ -82,13 +82,12 @@ func runOnce(outputPath string) {
 	fmt.Println("Screenshot copied to clipboard")
 }
 
-// runSelect shows the fullscreen selection overlay, lets the user draw
-// runSelect displays a fullscreen region-selection overlay, captures the selected area,
-// and either saves the resulting image to outputPath or copies it to the clipboard.
-// If outputPath is non-empty the image is written to that path; otherwise it is copied
-// to the clipboard. If the user cancels selection the function returns without
-// producing an image; on capture, save, or clipboard errors the process prints an
-// error to stderr and exits with status 1.
+// runSelect displays a fullscreen region-selection overlay that lets the user draw a rectangle,
+// captures the selected area, and either saves the resulting image to outputPath or copies it
+// to the clipboard. If outputPath is non-empty the image is written to that path; otherwise it
+// is copied to the clipboard. If the user cancels selection the function returns without
+// producing an image; on capture, save, or clipboard errors the process prints an error to
+// stderr and exits with status 1.
 func runSelect(outputPath string) {
 	result, err := overlay.Show(0)
 	if err != nil {

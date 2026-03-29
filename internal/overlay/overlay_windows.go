@@ -187,12 +187,10 @@ func loWord(l uintptr) int { return int(int16(l & 0xFFFF)) }
 // hiWord extracts the high-order 16 bits of l and returns them as a signed int (sign-extended from 16 bits).
 func hiWord(l uintptr) int { return int(int16((l >> 16) & 0xFFFF)) }
 
-// ---------------------------------------------------------------------------
-// wndProc – handles paint, mouse, and keyboard events.
-// wndProc handles Win32 messages for the overlay window, processing cursor updates,
-// painting, mouse input to drive the selection lifecycle, keyboard cancellation, and
-// window teardown.
-// For messages it does not handle, it delegates to DefWindowProcW and returns that result.
+// wndProc handles Win32 messages for the overlay window, processing cursor
+// updates, painting, mouse input to drive the selection lifecycle, keyboard
+// cancellation, and window teardown. Unhandled messages are delegated to
+// DefWindowProcW.
 
 func wndProc(hwnd, msg, wParam, lParam uintptr) uintptr {
 	switch msg {
@@ -232,7 +230,7 @@ func wndProc(hwnd, msg, wParam, lParam uintptr) uintptr {
 			ovState.sel.Update(x, y)
 			region := ovState.sel.End()
 			procReleaseCapture.Call()
-			ovState.result = &Result{Region: region, Cancelled: region == image.ZR}
+			ovState.result = &Result{Region: region}
 			procDestroyWindow.Call(hwnd)
 		}
 		return 0
@@ -254,8 +252,7 @@ func wndProc(hwnd, msg, wParam, lParam uintptr) uintptr {
 	return ret
 }
 
-// paintOverlay renders the dimmed screenshot, then composites the bright
-// hdc is a Win32 device context handle where the overlay will be drawn.
+// paintOverlay renders the dimmed screenshot into the given Win32 device context (hdc) and composites the bright selection region on top.
 func paintOverlay(hdc uintptr) {
 	if ovState.dimmed == nil {
 		return
@@ -336,15 +333,11 @@ func nullBrushHandle() uintptr {
 }
 
 // ---------------------------------------------------------------------------
-// showPlatform — Win32 overlay entry point
-// showPlatform displays a fullscreen overlay on the specified monitor that lets the user select a rectangular region.
-// 
-// showPlatform pins the goroutine to the OS thread, captures the given monitor's screen, presents a topmost
-// fullscreen overlay window that accepts mouse and keyboard input to create or cancel a selection, and runs a
-// Win32 message loop until the overlay is dismissed. It returns the final selection Result (with Cancelled set
-// when the user aborts) or an error if setup (capture, monitor info, or window creation) fails.
-//
-// monitor is the index of the monitor to capture and display the overlay for.
+// showPlatform displays a fullscreen overlay on the specified monitor that
+// lets the user select a rectangular region. It pins the goroutine to the OS
+// thread, captures the screen, creates a topmost popup window, and runs a
+// Win32 message loop until the user completes or cancels the selection. It
+// returns the final Result or an error if setup fails.
 
 func showPlatform(monitor int) (*Result, error) {
 	// Pin to the OS thread since Win32 window messages are thread-local.
@@ -387,13 +380,13 @@ func showPlatform(monitor int) (*Result, error) {
 		ClassName: className,
 	}
 	atom, _, regErr := procRegisterClassExW.Call(uintptr(unsafe.Pointer(&wc)))
-	if atom == 0 {
+	if atom == 0 && regErr != windows.ERROR_CLASS_ALREADY_EXISTS {
 		return nil, fmt.Errorf("overlay: RegisterClassExW failed: %v", regErr)
 	}
 
 	// Create fullscreen, topmost popup window.
 	windowName, _ := windows.UTF16PtrFromString("Screensaver Overlay")
-	hwnd, _, _ := procCreateWindowExW.Call(
+	hwnd, _, cwErr := procCreateWindowExW.Call(
 		wsExTopmost|wsExToolWindow,
 		uintptr(unsafe.Pointer(className)),
 		uintptr(unsafe.Pointer(windowName)),
@@ -403,7 +396,7 @@ func showPlatform(monitor int) (*Result, error) {
 		0, 0, hInst, 0,
 	)
 	if hwnd == 0 {
-		return nil, fmt.Errorf("overlay: CreateWindowExW failed")
+		return nil, fmt.Errorf("overlay: CreateWindowExW failed: %v", cwErr)
 	}
 	ovState.hwnd = hwnd
 
@@ -414,7 +407,14 @@ func showPlatform(monitor int) (*Result, error) {
 	var m winMsg
 	for {
 		ret, _, _ := procGetMessageW.Call(uintptr(unsafe.Pointer(&m)), 0, 0, 0)
-		if ret == 0 || int32(ret) == -1 {
+		// GetMessageW returns:
+		//   >0: message retrieved
+		//    0: WM_QUIT (normal termination)
+		//   -1: error
+		if int32(ret) == -1 {
+			return nil, fmt.Errorf("overlay: GetMessageW failed: %v", windows.GetLastError())
+		}
+		if ret == 0 {
 			break
 		}
 		procTranslateMessage.Call(uintptr(unsafe.Pointer(&m)))

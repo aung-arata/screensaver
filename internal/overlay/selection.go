@@ -61,9 +61,8 @@ func (s *SelectionState) Reset() {
 }
 
 // normalizeRect converts two arbitrary corner points into a canonical
-// image.Rectangle with Min <= Max. Returns image.ZR if the rectangle
-// normalizeRect constructs a canonical image.Rectangle from the two points (x1, y1) and (x2, y2).
-// It returns image.ZR when either the width or height of the resulting rectangle is zero.
+// image.Rectangle with Min <= Max. It returns image.ZR if the resulting
+// rectangle has zero width or height.
 func normalizeRect(x1, y1, x2, y2 int) image.Rectangle {
 	r := image.Rect(x1, y1, x2, y2).Canon()
 	if r.Dx() == 0 || r.Dy() == 0 {
