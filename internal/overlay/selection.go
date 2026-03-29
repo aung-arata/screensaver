@@ -32,14 +32,14 @@ func (s *SelectionState) Update(x, y int) {
 	s.currentY = y
 }
 
-// End finalises the selection and returns the selected rectangle.
+// End finalizes the selection and returns the selected rectangle.
 // Returns image.ZR if the selection has zero area.
 func (s *SelectionState) End() image.Rectangle {
 	s.active = false
 	return s.Bounds()
 }
 
-// Bounds returns the current selection rectangle normalised so that
+// Bounds returns the current selection rectangle normalized so that
 // Min is the top-left corner and Max is the bottom-right corner.
 // Returns image.ZR if the selection has zero area.
 func (s *SelectionState) Bounds() image.Rectangle {
