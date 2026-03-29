@@ -15,8 +15,8 @@ Built in **Go** — compiles to a single binary with no runtime dependencies.
 | Copy to clipboard | ✅ |
 | Save to PNG / JPEG | ✅ |
 | Multi-monitor support | ✅ |
-| Full-screen selection overlay | 🚧 |
-| Rubber-band region selection | 🚧 |
+| Full-screen selection overlay | ✅ |
+| Rubber-band region selection | ✅ |
 | Post-capture annotation editor | 🚧 |
 | Pen / freehand drawing | 🚧 |
 | Rectangle annotation | 🚧 |
@@ -88,6 +88,20 @@ screensaver --once
 # Save screenshot to a file
 screensaver --once --output screenshot.png
 ```
+
+### Interactive region selection
+
+```bash
+# Select a region and copy to clipboard
+screensaver --select
+
+# Select a region and save to a file
+screensaver --select --output region.png
+```
+
+The screen dims and a crosshair cursor appears. Click and drag to select the
+region you want to capture. Release the mouse to capture the selection, or
+press **Escape** to cancel.
 
 ### Background daemon (planned)
 
