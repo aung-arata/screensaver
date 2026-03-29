@@ -172,6 +172,12 @@ var (
 		hwnd          uintptr
 		monitorBounds image.Rectangle
 		crossCursor   uintptr
+
+		// Reusable paint buffers to avoid per-frame allocations.
+		paintFrame  *image.RGBA // composited RGBA frame
+		paintPixels []byte      // BGRA pixel buffer for GDI
+		paintW      int32       // cached width of paint buffers
+		paintH      int32       // cached height of paint buffers
 	}
 )
 
@@ -255,8 +261,18 @@ func paintOverlay(hdc uintptr) {
 		return
 	}
 
-	// Decide which image to render: compose selection into dimmed if active.
-	frame := image.NewRGBA(ovState.dimmed.Bounds())
+	bounds := ovState.dimmed.Bounds()
+	w, h := int32(bounds.Dx()), int32(bounds.Dy())
+
+	// Allocate or reuse paint buffers when dimensions change.
+	if ovState.paintW != w || ovState.paintH != h {
+		ovState.paintFrame = image.NewRGBA(bounds)
+		ovState.paintPixels = make([]byte, len(ovState.paintFrame.Pix))
+		ovState.paintW = w
+		ovState.paintH = h
+	}
+
+	frame := ovState.paintFrame
 	copy(frame.Pix, ovState.dimmed.Pix)
 
 	sel := ovState.sel.Bounds()
@@ -264,11 +280,8 @@ func paintOverlay(hdc uintptr) {
 		ComposeSelection(frame, ovState.screenshot, sel)
 	}
 
-	bounds := frame.Bounds()
-	w, h := int32(bounds.Dx()), int32(bounds.Dy())
-
 	// Convert RGBA (top-down) to BGRA (bottom-up) for GDI StretchDIBits.
-	pixels := make([]byte, len(frame.Pix))
+	pixels := ovState.paintPixels
 	stride := int(frame.Stride)
 	for y := 0; y < int(h); y++ {
 		srcRow := frame.Pix[y*stride : y*stride+stride]
@@ -373,7 +386,10 @@ func showPlatform(monitor int) (*Result, error) {
 		Cursor:    ovState.crossCursor,
 		ClassName: className,
 	}
-	procRegisterClassExW.Call(uintptr(unsafe.Pointer(&wc)))
+	atom, _, regErr := procRegisterClassExW.Call(uintptr(unsafe.Pointer(&wc)))
+	if atom == 0 {
+		return nil, fmt.Errorf("overlay: RegisterClassExW failed: %v", regErr)
+	}
 
 	// Create fullscreen, topmost popup window.
 	windowName, _ := windows.UTF16PtrFromString("Screensaver Overlay")
