@@ -1,6 +1,8 @@
 # Screensaver 🖼️
 
-A **lightweight, portable screenshot tool** for Windows (and Linux/macOS) inspired by [Lightshot](https://app.prntscr.com/).
+A **lightweight, portable screenshot tool** for Windows (with Linux/macOS support) inspired by [Lightshot](https://app.prntscr.com/).
+
+Built in **Go** — compiles to a single binary with no runtime dependencies.
 
 ---
 
@@ -8,106 +10,152 @@ A **lightweight, portable screenshot tool** for Windows (and Linux/macOS) inspir
 
 | Feature | Status |
 |---|---|
-| Full-screen selection overlay | ✅ |
-| Rubber-band region selection | ✅ |
-| Post-capture editor | ✅ |
-| Pen / freehand drawing | ✅ |
-| Rectangle annotation | ✅ |
-| Arrow annotation | ✅ |
-| Text annotation | ✅ |
-| Undo | ✅ |
+| Full-screen capture | ✅ |
+| Region capture | ✅ |
 | Copy to clipboard | ✅ |
 | Save to PNG / JPEG | ✅ |
-| Global hotkey daemon | ✅ |
 | Multi-monitor support | ✅ |
+| Full-screen selection overlay | 🚧 |
+| Rubber-band region selection | 🚧 |
+| Post-capture annotation editor | 🚧 |
+| Pen / freehand drawing | 🚧 |
+| Rectangle annotation | 🚧 |
+| Arrow annotation | 🚧 |
+| Text annotation | 🚧 |
+| Undo | 🚧 |
+| Global hotkey daemon | 🚧 |
+| System tray icon | 🚧 |
+
+> ✅ = implemented, 🚧 = planned / in progress
+
+---
+
+## Tech Stack
+
+| Purpose | Library |
+|---|---|
+| **Language** | [Go](https://go.dev/) — single binary, no runtime deps, fast startup |
+| Screen capture | [kbinani/screenshot](https://github.com/kbinani/screenshot) |
+| Win32 hooks (hotkey, cursor) | [golang.org/x/sys/windows](https://pkg.go.dev/golang.org/x/sys/windows) |
+| Clipboard integration | Platform-native (xclip/xsel on Linux, osascript on macOS, PowerShell on Windows) |
+| Image annotation/drawing | [fogleman/gg](https://github.com/fogleman/gg) (planned) |
+| System tray | [getlantern/systray](https://github.com/getlantern/systray) (planned) |
+| GUI | [Fyne](https://fyne.io/) or [Walk](https://github.com/lxn/walk) or raw Win32 (planned) |
+| Image encoding | stdlib `image/png`, `image/jpeg` |
 
 ---
 
 ## Requirements
 
-- Python 3.9+
-- `tkinter` (ships with most Python distributions; on Ubuntu: `sudo apt install python3-tk`)
+- [Go 1.21+](https://go.dev/dl/)
 
-Install Python dependencies:
+On Linux, `xclip` or `xsel` is required for clipboard support:
 
 ```bash
-pip install -r requirements.txt
+sudo apt install xclip   # Debian/Ubuntu
 ```
 
 ---
 
 ## Installation
 
-```bash
-pip install .
-```
-
-Or run directly from source without installing:
+### From source
 
 ```bash
-python -m screensaver
+go install github.com/aung-arata/screensaver/cmd/screensaver@latest
 ```
+
+### Build locally
+
+```bash
+git clone https://github.com/aung-arata/screensaver.git
+cd screensaver
+go build -o screensaver ./cmd/screensaver
+```
+
+This produces a single `screensaver` binary (or `screensaver.exe` on Windows).
 
 ---
 
 ## Usage
 
-### Background daemon (recommended)
+### One-shot mode (capture full screen)
 
-Launch the tool in the background.  Press **Ctrl+Shift+S** at any time to open
-the selection overlay:
+```bash
+# Copy screenshot to clipboard
+screensaver --once
+
+# Save screenshot to a file
+screensaver --once --output screenshot.png
+```
+
+### Background daemon (planned)
 
 ```bash
 screensaver
-# or
-python -m screensaver
+# Press Ctrl+Shift+S to take a screenshot
+# Press Ctrl+C to quit
 ```
 
-### One-shot mode
-
-Capture a single screenshot and exit:
+### Custom hotkey (planned)
 
 ```bash
-screensaver --once
-python -m screensaver --once
+screensaver --hotkey "ctrl+shift+p"
 ```
 
-### Custom hotkey
+### Version
 
 ```bash
-screensaver --hotkey "<ctrl>+<shift>+p"
+screensaver --version
 ```
 
 ---
 
 ## How it works
 
-1. Press the hotkey (or run `--once`).
+1. Run `screensaver --once` to capture the full screen.
+2. The image is copied to the clipboard or saved to the specified path.
+
+**Planned interactive workflow:**
+
+1. Press the hotkey (default: **Ctrl+Shift+S**).
 2. The screen dims and a crosshair cursor appears.
 3. Click and drag to select the region you want to capture.
 4. Release the mouse — the **Editor** window opens with the captured region.
 5. Use the toolbar to annotate the image (pen, rectangle, arrow, text).
-6. Click **Copy** to copy the image to your clipboard, or **Save** to write it
-   to disk.
+6. Click **Copy** to copy to clipboard, or **Save** to write to disk.
 7. Press **Escape** at any time during selection to cancel.
 
 ---
 
-## Project structure
+## Architecture
 
 ```
-src/
+cmd/
 └── screensaver/
-    ├── __init__.py       # Package metadata
-    ├── __main__.py       # python -m screensaver entry point
-    ├── main.py           # CLI argument parsing + hotkey daemon
-    ├── capture.py        # Screen capture (mss + Pillow)
-    ├── overlay.py        # Fullscreen selection overlay (tkinter)
-    ├── editor.py         # Post-capture annotation editor (tkinter)
-    └── utils.py          # Save & clipboard helpers
-tests/
-├── test_capture.py
-└── test_utils.py
+    └── main.go              # CLI entry point + flag parsing
+
+internal/
+├── capture/
+│   ├── capture.go           # Screen capture (kbinani/screenshot)
+│   └── capture_test.go      # Unit tests
+├── clipboard/
+│   └── clipboard.go         # Copy image to system clipboard
+├── editor/
+│   └── editor.go            # Post-capture annotation editor (planned)
+├── hotkey/
+│   ├── hotkey.go            # Global hotkey listener interface
+│   ├── hotkey_windows.go    # Win32 RegisterHotKey implementation
+│   └── hotkey_stub.go       # Stub for non-Windows platforms
+├── overlay/
+│   ├── overlay.go           # Selection overlay interface
+│   ├── overlay_windows.go   # Win32 layered window (planned)
+│   └── overlay_stub.go      # Stub for non-Windows platforms
+├── tray/
+│   └── tray.go              # System tray integration (planned)
+└── utils/
+    ├── utils.go             # Save image & path helpers
+    └── utils_test.go        # Unit tests
 ```
 
 ---
@@ -115,8 +163,23 @@ tests/
 ## Running tests
 
 ```bash
-pip install pytest
-pytest
+go test ./...
+```
+
+With verbose output:
+
+```bash
+go test -v ./...
+```
+
+---
+
+## Cross-compilation
+
+Build for Windows from any platform:
+
+```bash
+GOOS=windows GOARCH=amd64 go build -o screensaver.exe ./cmd/screensaver
 ```
 
 ---

@@ -1,26 +1,25 @@
-# Python
-__pycache__/
-*.py[cod]
-*.pyo
-*.pyd
-*.egg-info/
-*.egg
-dist/
-build/
-.eggs/
-.venv/
-venv/
-env/
-*.env
+# Go
+/screensaver
+/screensaver.exe
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
 
-# Distribution
-*.whl
-*.tar.gz
+# Go test binary
+*.test
 
-# Pytest
-.pytest_cache/
-.coverage
-htmlcov/
+# Go coverage
+*.out
+coverage.html
+
+# Go build cache
+/bin/
+/dist/
+
+# Vendor (if not committed)
+# /vendor/
 
 # Editor
 .idea/
@@ -30,3 +29,6 @@ htmlcov/
 
 # macOS
 .DS_Store
+
+# Windows
+Thumbs.db
