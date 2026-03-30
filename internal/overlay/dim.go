@@ -10,11 +10,15 @@ func DimImage(src *image.RGBA, factor uint8) *image.RGBA {
 	bounds := src.Bounds()
 	dst := image.NewRGBA(bounds)
 	f := uint16(factor)
-	for i := 0; i < len(src.Pix); i += 4 {
-		dst.Pix[i+0] = uint8(uint16(src.Pix[i+0]) * f / 255) // R
-		dst.Pix[i+1] = uint8(uint16(src.Pix[i+1]) * f / 255) // G
-		dst.Pix[i+2] = uint8(uint16(src.Pix[i+2]) * f / 255) // B
-		dst.Pix[i+3] = src.Pix[i+3]                           // A
+	for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
+		for x := bounds.Min.X; x < bounds.Max.X; x++ {
+			off := src.PixOffset(x, y)
+			dOff := dst.PixOffset(x, y)
+			dst.Pix[dOff+0] = uint8(uint16(src.Pix[off+0]) * f / 255) // R
+			dst.Pix[dOff+1] = uint8(uint16(src.Pix[off+1]) * f / 255) // G
+			dst.Pix[dOff+2] = uint8(uint16(src.Pix[off+2]) * f / 255) // B
+			dst.Pix[dOff+3] = src.Pix[off+3]                           // A
+		}
 	}
 	return dst
 }

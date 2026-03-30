@@ -230,6 +230,7 @@ func wndProc(hwnd, msg, wParam, lParam uintptr) uintptr {
 			ovState.sel.Update(x, y)
 			region := ovState.sel.End()
 			procReleaseCapture.Call()
+			region = region.Intersect(ovState.monitorBounds)
 			ovState.result = &Result{Region: region}
 			procDestroyWindow.Call(hwnd)
 		}

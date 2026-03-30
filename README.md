@@ -15,8 +15,8 @@ Built in **Go** — compiles to a single binary with no runtime dependencies.
 | Copy to clipboard | ✅ |
 | Save to PNG / JPEG | ✅ |
 | Multi-monitor support | ✅ |
-| Full-screen selection overlay | ✅ |
-| Rubber-band region selection | ✅ |
+| Full-screen selection overlay | ✅ (Windows only) |
+| Rubber-band region selection | ✅ (Windows only) |
 | Post-capture annotation editor | 🚧 |
 | Pen / freehand drawing | 🚧 |
 | Rectangle annotation | 🚧 |
@@ -89,7 +89,7 @@ screensaver --once
 screensaver --once --output screenshot.png
 ```
 
-### Interactive region selection
+### Interactive region selection (Windows only)
 
 ```bash
 # Select a region and copy to clipboard
@@ -102,6 +102,10 @@ screensaver --select --output region.png
 The screen dims and a crosshair cursor appears. Click and drag to select the
 region you want to capture. Release the mouse to capture the selection, or
 press **Escape** to cancel.
+
+> **Note:** `--select` requires Windows (Win32 APIs). On non-Windows platforms
+> the command returns a "not yet implemented" error (see `overlay_stub.go`).
+> Cross-platform support via a GUI toolkit (e.g. Fyne) is planned.
 
 ### Background daemon (planned)
 

@@ -100,6 +100,11 @@ func runSelect(outputPath string) {
 		return
 	}
 
+	if result.Region.Dx() == 0 || result.Region.Dy() == 0 {
+		fmt.Println("No selection")
+		return
+	}
+
 	region := capture.Region{
 		X:      result.Region.Min.X,
 		Y:      result.Region.Min.Y,
