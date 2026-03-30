@@ -3,7 +3,6 @@ package editor
 import (
 	"image"
 	"image/color"
-	"math"
 	"os"
 	"testing"
 
@@ -335,11 +334,39 @@ func TestArrowAnnotation_Draw_Shaft(t *testing.T) {
 }
 
 func TestArrowAnnotation_HeadLength_ScalesWithWidth(t *testing.T) {
-	// headLen = max(10, width*4); for width=5 expect 20.
-	width := 5.0
-	got := math.Max(10, width*4)
-	if got != 20 {
-		t.Errorf("expected headLen 20, got %v", got)
+	// For a horizontal arrow (angle=0) with Width=5, headLen = max(10, 5*4) = 20.
+	// Barb endpoints from tip (180, 100):
+	//   spread = ±π/6 (30°)
+	//   hx = 180 - 20*cos(∓π/6) ≈ 163
+	//   hy = 100 - 20*sin(∓π/6) = 90 or 110
+	// Scan the two barb regions and confirm coloured pixels are present there.
+	ctx := gg.NewContext(200, 200)
+	ctx.SetRGB(0, 0, 0)
+	ctx.Clear()
+	a := &ArrowAnnotation{X1: 20, Y1: 100, X2: 180, Y2: 100, Colour: "#0000FF", Width: 5}
+	a.Draw(ctx)
+	img := ctx.Image()
+
+	// Helper: returns true if any pixel in the scan window has b > 100.
+	hasBlue := func(x0, y0, x1, y1 int) bool {
+		for y := y0; y <= y1; y++ {
+			for x := x0; x <= x1; x++ {
+				_, _, b, _ := img.At(x, y).RGBA()
+				if b>>8 > 100 {
+					return true
+				}
+			}
+		}
+		return false
+	}
+
+	// Barb toward (163, 110) – scan a ±3 px window around the midpoint (171, 105).
+	if !hasBlue(168, 102, 174, 108) {
+		t.Error("expected arrowhead barb pixels near (171, 105) but found none")
+	}
+	// Barb toward (163, 90) – scan a ±3 px window around the midpoint (171, 95).
+	if !hasBlue(168, 92, 174, 98) {
+		t.Error("expected arrowhead barb pixels near (171, 95) but found none")
 	}
 }
 

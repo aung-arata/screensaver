@@ -18,8 +18,8 @@ package editor
 import (
 	"fmt"
 	"image"
-	"image/draw"
 	"math"
+	"os"
 
 	"github.com/fogleman/gg"
 
@@ -125,11 +125,46 @@ type TextAnnotation struct {
 	Size    float64 // font size in points
 }
 
+// systemFontPaths lists candidate TrueType font paths to try, in priority
+// order.  Only the first path that exists on the current system is used.
+var systemFontPaths = []string{
+	// Linux – DejaVu and Liberation families are widely available.
+	"/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+	"/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+	"/usr/share/fonts/TTF/DejaVuSans.ttf",
+	// macOS – San Francisco and Helvetica are bundled with the OS.
+	"/System/Library/Fonts/SFNSDisplay.ttf",
+	"/System/Library/Fonts/Helvetica.ttc",
+	"/Library/Fonts/Arial.ttf",
+	// Windows
+	`C:\Windows\Fonts\arial.ttf`,
+}
+
+// findSystemFont returns the first existing path in systemFontPaths, or "".
+func findSystemFont() string {
+	for _, p := range systemFontPaths {
+		if _, err := os.Stat(p); err == nil {
+			return p
+		}
+	}
+	return ""
+}
+
 // Draw implements Annotation.
+// It attempts to load a system font at the requested size so that Size is
+// honoured.  If no suitable font file is found on the current platform the
+// call falls back to fogleman/gg's built-in bitmap font.
 func (t *TextAnnotation) Draw(ctx *gg.Context) {
 	ctx.SetHexColor(t.Colour)
-	// fogleman/gg uses the font set via LoadFontFace; if none is loaded
-	// the built-in bitmap font is used automatically.
+	if t.Size > 0 {
+		if path := findSystemFont(); path != "" {
+			// Ignore the error: if loading fails we continue with the
+			// bitmap fallback that is already active on the context.
+			_ = ctx.LoadFontFace(path, t.Size)
+		}
+		// If no system font is found, fogleman/gg falls back to the
+		// built-in basicfont.Face7x13 (fixed size).
+	}
 	ctx.DrawStringAnchored(t.Content, t.X, t.Y, 0, 1)
 }
 
@@ -203,13 +238,7 @@ func (e *Editor) CopyToClipboard() error {
 	if err != nil {
 		return fmt.Errorf("rendering annotations: %w", err)
 	}
-	rgba, ok := img.(*image.RGBA)
-	if !ok {
-		b := img.Bounds()
-		rgba = image.NewRGBA(b)
-		draw.Draw(rgba, b, img, b.Min, draw.Src)
-	}
-	return clipboard.CopyImage(rgba)
+	return clipboard.CopyImage(img)
 }
 
 // Save renders the annotated image and writes it to path.

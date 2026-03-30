@@ -12,6 +12,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"image"
 	"os"
 
 	"github.com/aung-arata/screensaver/internal/capture"
@@ -59,6 +60,16 @@ func main() {
 	runDaemon(*hotkey)
 }
 
+// openEditorAndExit opens the annotation editor for img.
+// On error it writes to stderr and exits with status 1.
+func openEditorAndExit(img image.Image) {
+	e := editor.New(img)
+	if err := e.Run(); err != nil {
+		fmt.Fprintf(os.Stderr, "error running editor: %v\n", err)
+		os.Exit(1)
+	}
+}
+
 // runOnce captures a full-screen screenshot and saves it to outputPath or copies it to the clipboard.
 // If openEditor is true the annotation editor is opened instead of the default copy/save behaviour.
 // If outputPath is non-empty the image is written there; otherwise the image is copied to the clipboard.
@@ -71,11 +82,7 @@ func runOnce(outputPath string, openEditor bool) {
 	}
 
 	if openEditor {
-		e := editor.New(img)
-		if err := e.Run(); err != nil {
-			fmt.Fprintf(os.Stderr, "error running editor: %v\n", err)
-			os.Exit(1)
-		}
+		openEditorAndExit(img)
 		return
 	}
 
@@ -132,11 +139,7 @@ func runSelect(outputPath string, openEditor bool) {
 	}
 
 	if openEditor {
-		e := editor.New(img)
-		if err := e.Run(); err != nil {
-			fmt.Fprintf(os.Stderr, "error running editor: %v\n", err)
-			os.Exit(1)
-		}
+		openEditorAndExit(img)
 		return
 	}
 
