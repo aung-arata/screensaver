@@ -17,12 +17,12 @@ Built in **Go** — compiles to a single binary with no runtime dependencies.
 | Multi-monitor support | ✅ |
 | Full-screen selection overlay | ✅ (Windows only) |
 | Rubber-band region selection | ✅ (Windows only) |
-| Post-capture annotation editor | 🚧 |
-| Pen / freehand drawing | 🚧 |
-| Rectangle annotation | 🚧 |
-| Arrow annotation | 🚧 |
-| Text annotation | 🚧 |
-| Undo | 🚧 |
+| Post-capture annotation editor | ✅ |
+| Pen / freehand drawing | ✅ |
+| Rectangle annotation | ✅ |
+| Arrow annotation | ✅ |
+| Text annotation | ✅ |
+| Undo | ✅ |
 | Global hotkey daemon | 🚧 |
 | System tray icon | 🚧 |
 
@@ -38,7 +38,7 @@ Built in **Go** — compiles to a single binary with no runtime dependencies.
 | Screen capture | [kbinani/screenshot](https://github.com/kbinani/screenshot) |
 | Win32 hooks (hotkey, cursor) | [golang.org/x/sys/windows](https://pkg.go.dev/golang.org/x/sys/windows) |
 | Clipboard integration | Platform-native (xclip/xsel on Linux, osascript on macOS, PowerShell on Windows) |
-| Image annotation/drawing | [fogleman/gg](https://github.com/fogleman/gg) (planned) |
+| Image annotation/drawing | [fogleman/gg](https://github.com/fogleman/gg) |
 | System tray | [getlantern/systray](https://github.com/getlantern/systray) (planned) |
 | GUI | [Fyne](https://fyne.io/) or [Walk](https://github.com/lxn/walk) or raw Win32 (planned) |
 | Image encoding | stdlib `image/png`, `image/jpeg` |
@@ -87,6 +87,9 @@ screensaver --once
 
 # Save screenshot to a file
 screensaver --once --output screenshot.png
+
+# Open annotation editor after capture
+screensaver --once --edit
 ```
 
 ### Interactive region selection (Windows only)
@@ -97,6 +100,9 @@ screensaver --select
 
 # Select a region and save to a file
 screensaver --select --output region.png
+
+# Select a region and open the annotation editor
+screensaver --select --edit
 ```
 
 The screen dims and a crosshair cursor appears. Click and drag to select the
@@ -106,6 +112,20 @@ press **Escape** to cancel.
 > **Note:** `--select` requires Windows (Win32 APIs). On non-Windows platforms
 > the command returns a "not yet implemented" error (see `overlay_stub.go`).
 > Cross-platform support via a GUI toolkit (e.g. Fyne) is planned.
+
+### Annotation editor
+
+Pass `--edit` to any capture mode to open the post-capture annotation editor:
+
+```bash
+screensaver --once --edit
+screensaver --select --edit
+```
+
+The editor renders annotations (pen strokes, rectangles, arrows, text) onto
+the captured image using `fogleman/gg` and saves the result to a timestamped
+PNG file.  An interactive GUI toolbar (pen / rectangle / arrow / text tools,
+Copy and Save buttons) is in progress.
 
 ### Background daemon (planned)
 
