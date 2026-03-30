@@ -5,6 +5,7 @@
 //	screensaver              # run as background daemon with global hotkey
 //	screensaver --once       # capture a single screenshot and exit
 //	screensaver --select     # interactive region selection (overlay)
+//	screensaver --edit       # open annotation editor after capture (with --once or --select)
 //	screensaver --hotkey "ctrl+shift+p"  # use a custom hotkey
 package main
 
@@ -15,6 +16,7 @@ import (
 
 	"github.com/aung-arata/screensaver/internal/capture"
 	"github.com/aung-arata/screensaver/internal/clipboard"
+	"github.com/aung-arata/screensaver/internal/editor"
 	"github.com/aung-arata/screensaver/internal/overlay"
 	"github.com/aung-arata/screensaver/internal/utils"
 )
@@ -29,11 +31,13 @@ var Version = "0.2.0"
 // - --once: captures a full-screen screenshot once.
 // - default: starts daemon mode which registers a global hotkey (configurable via --hotkey).
 // The --output flag, when provided with --once or --select, saves the captured image to the given path.
+// The --edit flag, when combined with --once or --select, opens the annotation editor after capture.
 func main() {
 	once := flag.Bool("once", false, "Capture one screenshot and exit (no background daemon)")
 	sel := flag.Bool("select", false, "Interactive region selection: dims the screen and lets you drag a rectangle")
 	hotkey := flag.String("hotkey", "ctrl+shift+s", "Global hotkey combination (e.g. 'ctrl+shift+s')")
 	output := flag.String("output", "", "Save screenshot to this path (only with --once or --select)")
+	edit := flag.Bool("edit", false, "Open the annotation editor after capture (use with --once or --select)")
 	version := flag.Bool("version", false, "Print version and exit")
 	flag.Parse()
 
@@ -43,12 +47,12 @@ func main() {
 	}
 
 	if *sel {
-		runSelect(*output)
+		runSelect(*output, *edit)
 		return
 	}
 
 	if *once {
-		runOnce(*output)
+		runOnce(*output, *edit)
 		return
 	}
 
@@ -56,13 +60,23 @@ func main() {
 }
 
 // runOnce captures a full-screen screenshot and saves it to outputPath or copies it to the clipboard.
+// If openEditor is true the annotation editor is opened instead of the default copy/save behaviour.
 // If outputPath is non-empty the image is written there; otherwise the image is copied to the clipboard.
 // On error it writes a message to stderr and exits the process with status 1.
-func runOnce(outputPath string) {
+func runOnce(outputPath string, openEditor bool) {
 	img, err := capture.FullScreen(0)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)
+	}
+
+	if openEditor {
+		e := editor.New(img)
+		if err := e.Run(); err != nil {
+			fmt.Fprintf(os.Stderr, "error running editor: %v\n", err)
+			os.Exit(1)
+		}
+		return
 	}
 
 	if outputPath != "" {
@@ -83,12 +97,12 @@ func runOnce(outputPath string) {
 }
 
 // runSelect displays a fullscreen region-selection overlay that lets the user draw a rectangle,
-// captures the selected area, and either saves the resulting image to outputPath or copies it
-// to the clipboard. If outputPath is non-empty the image is written to that path; otherwise it
-// is copied to the clipboard. If the user cancels selection the function returns without
-// producing an image; on capture, save, or clipboard errors the process prints an error to
-// stderr and exits with status 1.
-func runSelect(outputPath string) {
+// captures the selected area, and either opens the annotation editor (if openEditor is true),
+// saves the resulting image to outputPath, or copies it to the clipboard. If outputPath is
+// non-empty the image is written to that path; otherwise it is copied to the clipboard. If the
+// user cancels selection the function returns without producing an image; on capture, save, or
+// clipboard errors the process prints an error to stderr and exits with status 1.
+func runSelect(outputPath string, openEditor bool) {
 	result, err := overlay.Show(0)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
@@ -115,6 +129,15 @@ func runSelect(outputPath string) {
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error capturing region: %v\n", err)
 		os.Exit(1)
+	}
+
+	if openEditor {
+		e := editor.New(img)
+		if err := e.Run(); err != nil {
+			fmt.Fprintf(os.Stderr, "error running editor: %v\n", err)
+			os.Exit(1)
+		}
+		return
 	}
 
 	if outputPath != "" {
