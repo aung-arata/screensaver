@@ -6,12 +6,15 @@
 // platform-specific APIs or CGo bindings.
 package hotkey
 
+import "sync"
+
 // Listener represents a global hotkey listener.
 type Listener struct {
-	Combo    string
-	Callback func()
-	done     chan struct{}
-	threadID uint32 // OS thread ID; used on Windows for Stop()
+	Combo     string
+	Callback  func()
+	done      chan struct{}
+	closeOnce sync.Once
+	threadID  uint32 // OS thread ID; used on Windows for Stop()
 }
 
 // NewListener creates a new hotkey listener for the given key combination.
@@ -45,11 +48,7 @@ func (l *Listener) Done() <-chan struct{} {
 	return l.done
 }
 
-// closeDone closes the done channel if it has not been closed already.
+// closeDone closes the done channel exactly once (safe for concurrent callers).
 func (l *Listener) closeDone() {
-	select {
-	case <-l.done:
-	default:
-		close(l.done)
-	}
+	l.closeOnce.Do(func() { close(l.done) })
 }

@@ -240,9 +240,11 @@ func run(cfg Config, cbs Callbacks) error {
 		return fmt.Errorf("tray: RegisterClassExW failed: %v", regErr)
 	}
 
-	// Create a message-only window (HWND_MESSAGE parent).
+	// Create a message-only window with HWND_MESSAGE as parent.
+	// HWND_MESSAGE = (HWND)(-3); ^uintptr(2) is bitwise NOT of 2,
+	// which equals -3 in two's complement.
 	windowName, _ := windows.UTF16PtrFromString("Screensaver Tray")
-	hwndMessage := ^uintptr(2) // HWND_MESSAGE = (HWND)-3
+	hwndMessage := ^uintptr(2)
 	hwnd, _, cwErr := trayProcCreateWindowExW.Call(
 		0,
 		uintptr(unsafe.Pointer(className)),

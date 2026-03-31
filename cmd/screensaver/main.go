@@ -16,6 +16,7 @@ import (
 	"image"
 	"os"
 	"os/signal"
+	"sync"
 
 	"github.com/aung-arata/screensaver/internal/capture"
 	"github.com/aung-arata/screensaver/internal/clipboard"
@@ -190,6 +191,7 @@ func runDaemon(hotkeyCombo string) {
 
 	// Channel closed when the tray "Quit" item is clicked.
 	quit := make(chan struct{})
+	var quitOnce sync.Once
 
 	// Start system tray (optional — not available on all platforms).
 	trayCfg := tray.DefaultConfig()
@@ -197,11 +199,7 @@ func runDaemon(hotkeyCombo string) {
 		err := tray.Run(trayCfg, tray.Callbacks{
 			OnCapture: captureAndCopy,
 			OnQuit: func() {
-				select {
-				case <-quit:
-				default:
-					close(quit)
-				}
+				quitOnce.Do(func() { close(quit) })
 			},
 		})
 		if err != nil {

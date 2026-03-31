@@ -65,6 +65,10 @@ func (l *Listener) start() error {
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
 
+	// Ensure the done channel is always closed when start() returns,
+	// regardless of whether the message loop exited normally or on error.
+	defer l.closeDone()
+
 	// Store thread ID so Stop() can post WM_QUIT from another goroutine.
 	tid, _, _ := procGetCurrentThreadId.Call()
 	atomic.StoreUint32(&l.threadID, uint32(tid))
@@ -90,7 +94,6 @@ func (l *Listener) start() error {
 		}
 	}
 
-	l.closeDone()
 	return nil
 }
 
