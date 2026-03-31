@@ -23,8 +23,8 @@ Built in **Go** — compiles to a single binary with no runtime dependencies.
 | Arrow annotation | ✅ |
 | Text annotation | ✅ |
 | Undo | ✅ |
-| Global hotkey daemon | 🚧 |
-| System tray icon | 🚧 |
+| Global hotkey daemon | ✅ (Windows only) |
+| System tray icon | ✅ (Windows only) |
 
 > ✅ = implemented, 🚧 = planned / in progress
 
@@ -39,7 +39,7 @@ Built in **Go** — compiles to a single binary with no runtime dependencies.
 | Win32 hooks (hotkey, cursor) | [golang.org/x/sys/windows](https://pkg.go.dev/golang.org/x/sys/windows) |
 | Clipboard integration | Platform-native (xclip/xsel on Linux, osascript on macOS, PowerShell on Windows) |
 | Image annotation/drawing | [fogleman/gg](https://github.com/fogleman/gg) |
-| System tray | [getlantern/systray](https://github.com/getlantern/systray) (planned) |
+| System tray | Win32 Shell_NotifyIcon (Windows) |
 | GUI | [Fyne](https://fyne.io/) or [Walk](https://github.com/lxn/walk) or raw Win32 (planned) |
 | Image encoding | stdlib `image/png`, `image/jpeg` |
 
@@ -177,15 +177,19 @@ the captured image using `fogleman/gg` and saves the result to a timestamped
 PNG file.  An interactive GUI toolbar (pen / rectangle / arrow / text tools,
 Copy and Save buttons) is in progress.
 
-### Background daemon (planned)
+### Background daemon (Windows)
 
 ```bash
 screensaver
-# Press Ctrl+Shift+S to take a screenshot
+# Press Ctrl+Shift+S to take a screenshot (copied to clipboard)
 # Press Ctrl+C to quit
 ```
 
-### Custom hotkey (planned)
+The daemon registers a global hotkey and optionally shows a system tray icon.
+On non-Windows platforms daemon mode is not yet available — use `--once` or
+`--select` instead.
+
+### Custom hotkey (Windows)
 
 ```bash
 screensaver --hotkey "ctrl+shift+p"
@@ -206,7 +210,7 @@ screensaver --version
 
 **Planned interactive workflow:**
 
-1. Press the hotkey (default: **Ctrl+Shift+S**).
+1. Press the hotkey (default: **Ctrl+Shift+S**) — registered via Win32 RegisterHotKey.
 2. The screen dims and a crosshair cursor appears.
 3. Click and drag to select the region you want to capture.
 4. Release the mouse — the **Editor** window opens with the captured region.
@@ -230,17 +234,26 @@ internal/
 ├── clipboard/
 │   └── clipboard.go         # Copy image to system clipboard
 ├── editor/
-│   └── editor.go            # Post-capture annotation editor (planned)
+│   ├── editor.go            # Post-capture annotation editor
+│   └── editor_test.go       # Unit tests
 ├── hotkey/
 │   ├── hotkey.go            # Global hotkey listener interface
+│   ├── combo.go             # Cross-platform hotkey combo parsing
+│   ├── combo_test.go        # Unit tests
+│   ├── hotkey_test.go        # Unit tests
 │   ├── hotkey_windows.go    # Win32 RegisterHotKey implementation
 │   └── hotkey_stub.go       # Stub for non-Windows platforms
 ├── overlay/
 │   ├── overlay.go           # Selection overlay interface
-│   ├── overlay_windows.go   # Win32 layered window (planned)
+│   ├── dim.go               # Image dimming utilities
+│   ├── selection.go         # Rubber-band selection state machine
+│   ├── overlay_windows.go   # Win32 layered window implementation
 │   └── overlay_stub.go      # Stub for non-Windows platforms
 ├── tray/
-│   └── tray.go              # System tray integration (planned)
+│   ├── tray.go              # System tray interface + types
+│   ├── tray_windows.go      # Win32 Shell_NotifyIcon implementation
+│   ├── tray_stub.go         # Stub for non-Windows platforms
+│   └── tray_test.go         # Unit tests
 └── utils/
     ├── utils.go             # Save image & path helpers
     └── utils_test.go        # Unit tests

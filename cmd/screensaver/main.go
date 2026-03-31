@@ -15,11 +15,14 @@ import (
 	"fmt"
 	"image"
 	"os"
+	"os/signal"
 
 	"github.com/aung-arata/screensaver/internal/capture"
 	"github.com/aung-arata/screensaver/internal/clipboard"
 	"github.com/aung-arata/screensaver/internal/editor"
+	"github.com/aung-arata/screensaver/internal/hotkey"
 	"github.com/aung-arata/screensaver/internal/overlay"
+	"github.com/aung-arata/screensaver/internal/tray"
 	"github.com/aung-arata/screensaver/internal/utils"
 )
 
@@ -160,19 +163,75 @@ func runSelect(outputPath string, openEditor bool) {
 	fmt.Println("Region screenshot copied to clipboard")
 }
 
-// runDaemon prints user-facing daemon-mode instructions and the configured hotkey.
-// The function does not start any GUI, hotkey listener, or tray; those platform-specific
-// components are implemented elsewhere and must run in a GUI environment.
-func runDaemon(hotkey string) {
+// runDaemon starts the background daemon: it registers a global hotkey,
+// starts a system tray icon (if available), and waits until a termination
+// signal is received or the tray "Quit" item is clicked.
+//
+// On non-Windows platforms the hotkey listener is not yet available and
+// the function exits with an error message suggesting --once mode instead.
+func runDaemon(hotkeyCombo string) {
 	fmt.Printf("[screensaver] Running in the background.\n")
-	fmt.Printf("  Press %s to take a screenshot.\n", hotkey)
+	fmt.Printf("  Press %s to take a screenshot.\n", hotkeyCombo)
 	fmt.Printf("  Press Ctrl+C to quit.\n")
 
-	// NOTE: Full GUI overlay, system tray, and hotkey listener require
-	// platform-specific Win32 APIs or a GUI toolkit (Fyne / Walk).
-	// This scaffold provides the architecture; platform-specific
-	// implementations are in internal/hotkey, internal/overlay,
-	// internal/editor, and internal/tray packages.
-	fmt.Println("[screensaver] Daemon mode requires a GUI environment (Windows/Linux/macOS).")
-	fmt.Println("[screensaver] Use --once for headless capture or --select for interactive selection.")
+	// Shared callback: capture the full screen and copy to clipboard.
+	captureAndCopy := func() {
+		img, err := capture.FullScreen(0)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "[screensaver] capture error: %v\n", err)
+			return
+		}
+		if err := clipboard.CopyImage(img); err != nil {
+			fmt.Fprintf(os.Stderr, "[screensaver] clipboard error: %v\n", err)
+			return
+		}
+		fmt.Println("[screensaver] Screenshot copied to clipboard")
+	}
+
+	// Channel closed when the tray "Quit" item is clicked.
+	quit := make(chan struct{})
+
+	// Start system tray (optional — not available on all platforms).
+	trayCfg := tray.DefaultConfig()
+	go func() {
+		err := tray.Run(trayCfg, tray.Callbacks{
+			OnCapture: captureAndCopy,
+			OnQuit: func() {
+				select {
+				case <-quit:
+				default:
+					close(quit)
+				}
+			},
+		})
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "[screensaver] System tray: %v\n", err)
+		}
+	}()
+
+	// Start global hotkey listener.
+	listener := hotkey.NewListener(hotkeyCombo, captureAndCopy)
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- listener.Start()
+	}()
+
+	// Handle OS signals for graceful shutdown.
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, os.Interrupt)
+
+	select {
+	case err := <-errCh:
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "[screensaver] %v\n", err)
+			fmt.Println("[screensaver] Use --once for headless capture or --select for interactive selection.")
+			os.Exit(1)
+		}
+	case sig := <-sigCh:
+		fmt.Printf("\n[screensaver] Received %v, shutting down...\n", sig)
+		listener.Stop()
+	case <-quit:
+		fmt.Println("[screensaver] Quit requested via tray, shutting down...")
+		listener.Stop()
+	}
 }
