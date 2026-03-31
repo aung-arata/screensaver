@@ -74,10 +74,14 @@ The binary is placed in `$GOPATH/bin` (usually `~/go/bin` on Linux/macOS or
 >
 > ```powershell
 > # One-time setup – add Go's bin directory to your user PATH
-> $goBin = Join-Path (& go env GOPATH) "bin"
-> $cur   = [System.Environment]::GetEnvironmentVariable("Path", "User")
-> $new   = if ($cur) { "$cur;$goBin" } else { $goBin }
-> [System.Environment]::SetEnvironmentVariable("Path", $new, "User")
+> $goBin  = Join-Path (& go env GOPATH) "bin"
+> $cur    = [System.Environment]::GetEnvironmentVariable("Path", "User")
+> $segs   = if ($cur) { $cur -split ';' | Where-Object { $_ -ne '' } } else { @() }
+> $exists = $segs | Where-Object { $_.TrimEnd('\','/') -ieq $goBin.TrimEnd('\','/') }
+> if (-not $exists) {
+>     $new = ($segs + $goBin) -join ';'
+>     [System.Environment]::SetEnvironmentVariable("Path", $new, "User")
+> }
 > # Then open a new terminal window.
 > ```
 

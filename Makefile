@@ -1,7 +1,7 @@
 # Detect OS: on Windows, $(OS) is set to "Windows_NT"
 ifeq ($(OS),Windows_NT)
     BINARY_NAME := screensaver.exe
-    RM          := del /Q
+    RM          := cmd /C del /Q
 else
     BINARY_NAME := screensaver
     RM          := rm -f
@@ -27,4 +27,4 @@ test:
 
 ## clean: remove build artefacts
 clean:
-	$(RM) screensaver screensaver.exe
+	-$(RM) screensaver screensaver.exe

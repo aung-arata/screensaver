@@ -18,13 +18,15 @@
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+$scriptDir = $PSScriptRoot
+
 # ---------------------------------------------------------------------------
 # 1. Build
 # ---------------------------------------------------------------------------
 Write-Host "Building screensaver.exe ..."
-go build -o screensaver.exe ./cmd/screensaver
+go build -o (Join-Path $scriptDir "screensaver.exe") (Join-Path $scriptDir "cmd\screensaver")
 if ($LASTEXITCODE -ne 0) {
-    Write-Error "Build failed. Make sure Go is installed and you are running this script from the repository root."
+    Write-Error "Build failed. Make sure Go is installed and that Go is on your PATH."
     exit 1
 }
 
@@ -46,7 +48,7 @@ if (-not (Test-Path $goBin)) {
 # 3. Copy binary
 # ---------------------------------------------------------------------------
 $dest = Join-Path $goBin "screensaver.exe"
-Copy-Item -Path "screensaver.exe" -Destination $dest -Force
+Copy-Item -Path (Join-Path $scriptDir "screensaver.exe") -Destination $dest -Force
 Write-Host "Installed: $dest"
 
 # ---------------------------------------------------------------------------
@@ -55,8 +57,14 @@ Write-Host "Installed: $dest"
 $userPath = [System.Environment]::GetEnvironmentVariable("Path", "User")
 if ($null -eq $userPath) { $userPath = "" }
 
-if ($userPath -notlike "*$goBin*") {
-    $newPath = if ($userPath) { "$userPath;$goBin" } else { $goBin }
+# Split on ';', trim trailing slashes/backslashes, compare case-insensitively.
+$normalizedBin = $goBin.TrimEnd('\', '/')
+$segments = $userPath -split ';' | Where-Object { $_ -ne '' }
+$alreadyPresent = $segments | Where-Object { $_.TrimEnd('\', '/') -ieq $normalizedBin }
+
+if (-not $alreadyPresent) {
+    $newSegments = $segments + $goBin
+    $newPath = $newSegments -join ';'
     [System.Environment]::SetEnvironmentVariable("Path", $newPath, "User")
     Write-Host ""
     Write-Host "Added '$goBin' to your user PATH."
