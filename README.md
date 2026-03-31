@@ -115,12 +115,17 @@ press **Escape** to cancel.
 
 ### Annotation editor
 
-Pass `--edit` to any capture mode to open the post-capture annotation editor:
+Pass `--edit` together with `--once` or `--select` to open the post-capture
+annotation editor:
 
 ```bash
-screensaver --once --edit
-screensaver --select --edit
+screensaver --once --edit        # full-screen capture + editor
+screensaver --select --edit      # region selection + editor (Windows only)
 ```
+
+> **Note:** `--edit` must be combined with `--once` or `--select`.  Using
+> `--edit` alone has no effect — the tool falls back to daemon mode and the
+> flag is ignored.
 
 The editor renders annotations (pen strokes, rectangles, arrows, text) onto
 the captured image using `fogleman/gg` and saves the result to a timestamped

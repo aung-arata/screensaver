@@ -2,10 +2,11 @@
 //
 // Usage:
 //
-//	screensaver              # run as background daemon with global hotkey
-//	screensaver --once       # capture a single screenshot and exit
-//	screensaver --select     # interactive region selection (overlay)
-//	screensaver --edit       # open annotation editor after capture (with --once or --select)
+//	screensaver                    # run as background daemon with global hotkey
+//	screensaver --once             # capture a single screenshot and exit
+//	screensaver --select           # interactive region selection (overlay, Windows only)
+//	screensaver --once --edit      # capture full screen and open annotation editor
+//	screensaver --select --edit    # select a region and open annotation editor (Windows only)
 //	screensaver --hotkey "ctrl+shift+p"  # use a custom hotkey
 package main
 
