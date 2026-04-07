@@ -3,14 +3,14 @@
 package editor
 
 import (
-	"fmt"
 	"image"
+	"image/draw"
+	"fmt"
 	"math"
 	"runtime"
 	"sync/atomic"
 	"unsafe"
 
-	"github.com/fogleman/gg"
 	"golang.org/x/sys/windows"
 
 	"github.com/aung-arata/screensaver/internal/utils"
@@ -326,12 +326,9 @@ func (e *Editor) runPlatform() error {
 	edState.dragging = false
 	edState.penStroke = nil
 
-	// Load cursors.
-	edState.crossCursor, _, _ = edProcLoadCursorW.Call(0, edHtClient+32514) // IDC_CROSS = 32515
-	edState.arrowCursor, _, _ = edProcLoadCursorW.Call(0, 32512)            // IDC_ARROW
-
-	// Use proper cross cursor constant
+	// Load cursors (IDC_CROSS = 32515, IDC_ARROW = 32512).
 	edState.crossCursor, _, _ = edProcLoadCursorW.Call(0, 32515)
+	edState.arrowCursor, _, _ = edProcLoadCursorW.Call(0, 32512)
 
 	hInst, _, _ := edProcGetModuleHandleW.Call(0)
 
@@ -864,11 +861,10 @@ func updateCachedFrame() {
 	}
 	rgba, ok := rendered.(*image.RGBA)
 	if !ok {
-		// Convert to *image.RGBA.
+		// Convert to *image.RGBA using image/draw.
 		bounds := rendered.Bounds()
 		tmp := image.NewRGBA(bounds)
-		ctx := gg.NewContextForImage(rendered)
-		copy(tmp.Pix, ctx.Image().(*image.RGBA).Pix)
+		draw.Draw(tmp, bounds, rendered, bounds.Min, draw.Src)
 		rgba = tmp
 	}
 	w := int32(rgba.Bounds().Dx())
@@ -974,13 +970,11 @@ func showTextInput(owner uintptr) string {
 	// Create a small dialog window.
 	dlgTitle, _ := windows.UTF16PtrFromString("Enter text")
 	dlgW, dlgH := int32(340), int32(110)
-	var ownerRect edRect
-	// Position dialog centered over the owner window.
+	// Position dialog centered on screen.
 	screenW, _, _ := edProcGetSystemMetrics.Call(edSmCXScreen)
 	screenH, _, _ := edProcGetSystemMetrics.Call(edSmCYScreen)
 	dlgX := (int32(screenW) - dlgW) / 2
 	dlgY := (int32(screenH) - dlgH) / 2
-	_ = ownerRect
 
 	dlgHwnd, _, _ := edProcCreateWindowExW.Call(
 		edWsExClientEdge,

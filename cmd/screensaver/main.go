@@ -169,6 +169,8 @@ func runSelect(outputPath string, openEditor bool) {
 // annotation editor with a full-screen capture.  Choosing "Select Region"
 // shows the overlay selection first.
 func runDaemon(combo string) {
+	quit := make(chan struct{})
+
 	// Start the hotkey listener in a background goroutine.
 	hl := hotkey.NewListener(combo, func() { go captureAndEdit() })
 	go func() {
@@ -182,12 +184,16 @@ func runDaemon(combo string) {
 		Tooltip:   fmt.Sprintf("Screensaver – press %s to capture", combo),
 		OnCapture: func() { go captureAndEdit() },
 		OnSelect:  func() { go selectAndEdit() },
-		OnQuit:    func() { os.Exit(0) },
+		OnQuit:    func() { close(quit) },
 	}
-	if err := tray.Run(cfg); err != nil {
-		fmt.Fprintf(os.Stderr, "tray: %v\n", err)
-		os.Exit(1)
-	}
+	go func() {
+		if err := tray.Run(cfg); err != nil {
+			fmt.Fprintf(os.Stderr, "tray: %v\n", err)
+		}
+		close(quit)
+	}()
+
+	<-quit
 }
 
 // captureAndEdit takes a full-screen screenshot and opens the annotation
