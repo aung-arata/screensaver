@@ -92,6 +92,9 @@ type notifyIconData struct {
 	HBalloonIcon     uintptr
 }
 
+// Compile-time assertion: notifyIconData must be 976 bytes on 64-bit Windows.
+var _ [976]byte = [unsafe.Sizeof(notifyIconData{})]byte{}
+
 type trayWinMsg struct {
 	HWnd    uintptr
 	Message uint32
@@ -268,8 +271,8 @@ func trayWndProc(hwnd, msg, wParam, lParam uintptr) uintptr {
 				go trayState.cfg.OnSelect()
 			}
 		case idTrayQuit:
-			// Remove icon first, then trigger quit.
-			trayProcShellNotifyIcon.Call(nimDelete, uintptr(unsafe.Pointer(&trayState.nid)))
+			// DestroyWindow triggers WM_DESTROY → PostQuitMessage → message
+			// loop exits → icon is deleted once after the loop in runPlatform.
 			trayProcDestroyWindow.Call(hwnd)
 			if trayState.cfg.OnQuit != nil {
 				trayState.cfg.OnQuit()

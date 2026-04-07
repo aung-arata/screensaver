@@ -3,10 +3,11 @@
 package editor
 
 import (
+	"fmt"
 	"image"
 	"image/draw"
-	"fmt"
 	"math"
+	"os"
 	"runtime"
 	"sync/atomic"
 	"unsafe"
@@ -230,6 +231,10 @@ var (
 	edProcFillRect          = edUser32.NewProc("FillRect")
 	edProcDrawTextW         = edUser32.NewProc("DrawTextW")
 	edProcGetKeyState       = edUser32.NewProc("GetKeyState")
+	edProcScreenToClient    = edUser32.NewProc("ScreenToClient")
+	edProcSetFocus          = edUser32.NewProc("SetFocus")
+	edProcGetCursorPosEd    = edUser32.NewProc("GetCursorPos")
+	edProcMessageBoxW       = edUser32.NewProc("MessageBoxW")
 	edProcGetModuleHandleW  = edKernel32.NewProc("GetModuleHandleW")
 	edProcSetBkModeGDI      = edGdi32.NewProc("SetBkMode")
 	edProcSetTextColorGDI   = edGdi32.NewProc("SetTextColor")
@@ -411,14 +416,16 @@ func editorWndProc(hwnd, msg, wParam, lParam uintptr) uintptr {
 	case edWmSetCursor:
 		// Use crosshair in the canvas, arrow in the toolbar.
 		if edLoWord(lParam) == edHtClient {
-			var cr edRect
-			edProcGetClientRect.Call(hwnd, uintptr(unsafe.Pointer(&cr)))
-			// Get cursor position relative to client
-			// We approximate: if y < toolbarHeight use arrow else cross
-			// Use last known mouse y via a simple heuristic —
-			// just always use crosshair in client area; toolbar buttons
-			// will reset it when hovered.
-			edProcSetCursor.Call(edState.crossCursor)
+			// Convert cursor screen position to client coordinates so we can
+			// check whether it is inside the toolbar strip.
+			var pt edPoint
+			edProcGetCursorPosEd.Call(uintptr(unsafe.Pointer(&pt)))
+			edProcScreenToClient.Call(hwnd, uintptr(unsafe.Pointer(&pt)))
+			if pt.Y < toolbarHeight {
+				edProcSetCursor.Call(edState.arrowCursor)
+			} else {
+				edProcSetCursor.Call(edState.crossCursor)
+			}
 			return 1
 		}
 
@@ -907,9 +914,16 @@ func doCopy() {
 func doSave() {
 	path, err := utils.GenerateFilename("", "png")
 	if err != nil {
+		fmt.Fprintf(os.Stderr, "[editor] GenerateFilename: %v\n", err)
+		edShowMessage(edState.hwnd, "Save failed: could not generate filename.")
 		return
 	}
-	_ = edState.ed.Save(path)
+	if err := edState.ed.Save(path); err != nil {
+		fmt.Fprintf(os.Stderr, "[editor] Save: %v\n", err)
+		edShowMessage(edState.hwnd, fmt.Sprintf("Save failed: %v", err))
+		return
+	}
+	edShowMessage(edState.hwnd, fmt.Sprintf("Saved to %s", path))
 }
 
 // updateTitle sets the window title to include the active tool name.
@@ -1033,8 +1047,8 @@ func showTextInput(owner uintptr) string {
 		dlgHwnd, edIdCancel, hInst, 0,
 	)
 
-	// Focus the edit.
-	edProcSendMessageW.Call(editHwnd, 0x0007 /*WM_SETFOCUS*/, 0, 0)
+	// Focus the edit control so the user can type immediately.
+	edProcSetFocus.Call(editHwnd)
 
 	edProcShowWindow.Call(dlgHwnd, edSwShow)
 	edProcUpdateWindow.Call(dlgHwnd)
@@ -1119,6 +1133,13 @@ func getWindowText(hwnd uintptr) string {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+// edShowMessage shows a simple Win32 MessageBox with the given text.
+func edShowMessage(owner uintptr, text string) {
+	msg, _ := windows.UTF16PtrFromString(text)
+	title, _ := windows.UTF16PtrFromString("Screensaver – Editor")
+	edProcMessageBoxW.Call(owner, uintptr(unsafe.Pointer(msg)), uintptr(unsafe.Pointer(title)), 0)
+}
 
 // hexToColorref converts a "#RRGGBB" string to a Win32 COLORREF (0x00BBGGRR).
 func hexToColorref(hex string) uint32 {

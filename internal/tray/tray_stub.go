@@ -2,9 +2,23 @@
 
 package tray
 
-// runPlatform blocks indefinitely on non-Windows platforms so that the daemon
-// goroutine stays alive.  The process can still be stopped with Ctrl+C /
-// SIGTERM via Go's default signal handling.
-func runPlatform(_ Config) error {
-	select {} // block forever
+import (
+	"os"
+	"os/signal"
+	"syscall"
+)
+
+// runPlatform waits for SIGINT or SIGTERM on non-Windows platforms.
+// When a signal arrives, cfg.OnQuit (if set) is called before returning.
+func runPlatform(cfg Config) error {
+	ch := make(chan os.Signal, 1)
+	signal.Notify(ch, syscall.SIGINT, syscall.SIGTERM)
+	defer signal.Stop(ch)
+
+	<-ch
+
+	if cfg.OnQuit != nil {
+		cfg.OnQuit()
+	}
+	return nil
 }

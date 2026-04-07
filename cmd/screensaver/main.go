@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"image"
 	"os"
+	"sync"
 
 	"github.com/aung-arata/screensaver/internal/capture"
 	"github.com/aung-arata/screensaver/internal/clipboard"
@@ -170,6 +171,8 @@ func runSelect(outputPath string, openEditor bool) {
 // shows the overlay selection first.
 func runDaemon(combo string) {
 	quit := make(chan struct{})
+	var once sync.Once
+	closeQuit := func() { once.Do(func() { close(quit) }) }
 
 	// Start the hotkey listener in a background goroutine.
 	hl := hotkey.NewListener(combo, func() { go captureAndEdit() })
@@ -184,16 +187,17 @@ func runDaemon(combo string) {
 		Tooltip:   fmt.Sprintf("Screensaver – press %s to capture", combo),
 		OnCapture: func() { go captureAndEdit() },
 		OnSelect:  func() { go selectAndEdit() },
-		OnQuit:    func() { close(quit) },
+		OnQuit:    closeQuit,
 	}
 	go func() {
 		if err := tray.Run(cfg); err != nil {
 			fmt.Fprintf(os.Stderr, "tray: %v\n", err)
 		}
-		close(quit)
+		closeQuit()
 	}()
 
 	<-quit
+	hl.Stop()
 }
 
 // captureAndEdit takes a full-screen screenshot and opens the annotation
