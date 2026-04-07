@@ -253,20 +253,10 @@ func (e *Editor) Save(path string) error {
 
 // Run opens the annotation editor window.
 //
-// A full interactive GUI (toolbar with pen / rectangle / arrow / text
-// tools, Copy and Save buttons) requires a platform GUI toolkit such as
-// Fyne or raw Win32 and is not yet implemented.  Run currently renders
-// the annotated image and saves it to a timestamped file so that the
-// programmatic annotation API is exercisable end-to-end.
+// On Windows this displays a native Win32 window with a toolbar
+// (Pen / Rect / Arrow / Text tools, colour picker, Undo, Copy, Save).
+// On other platforms it falls back to saving the annotated image to a
+// timestamped file.
 func (e *Editor) Run() error {
-	path, err := utils.GenerateFilename("", "png")
-	if err != nil {
-		return fmt.Errorf("generating filename: %w", err)
-	}
-	if err := e.Save(path); err != nil {
-		return fmt.Errorf("saving annotated screenshot: %w", err)
-	}
-	fmt.Printf("[editor] Annotated screenshot saved to %s\n", path)
-	fmt.Println("[editor] Interactive GUI is not yet implemented.")
-	return nil
+	return e.runPlatform()
 }

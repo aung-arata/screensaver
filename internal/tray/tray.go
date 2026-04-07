@@ -1,12 +1,16 @@
-// Package tray provides system tray integration using getlantern/systray.
+// Package tray provides system tray integration.
 //
-// The tray icon offers quick access to screenshot capture, preferences,
-// and quit actions.
+// On Windows this creates a Shell_NotifyIconW tray icon with a context menu
+// offering Capture, Select Region, and Quit actions.  On other platforms it
+// blocks until the process is terminated.
 package tray
 
 // Config holds system tray configuration.
 type Config struct {
-	Tooltip string
+	Tooltip   string
+	OnCapture func() // called when "Take Screenshot" is selected
+	OnSelect  func() // called when "Select Region" is selected
+	OnQuit    func() // called when "Quit" is selected
 }
 
 // DefaultConfig returns sensible defaults.
@@ -16,12 +20,8 @@ func DefaultConfig() Config {
 	}
 }
 
-// Run starts the system tray icon. onCapture is called when the user
-// clicks the "Capture" menu item.
-//
-// This is a placeholder; the full implementation would use
-// github.com/getlantern/systray.
-func Run(cfg Config, onCapture func()) error {
-	// TODO: implement system tray with getlantern/systray.
-	return nil
+// Run starts the system tray icon and blocks until the tray is dismissed or
+// OnQuit is called.
+func Run(cfg Config) error {
+	return runPlatform(cfg)
 }

@@ -2,7 +2,7 @@
 //
 // Usage:
 //
-//	screensaver                    # run as background daemon with global hotkey
+//	screensaver                    # run as background daemon with global hotkey + tray icon
 //	screensaver --once             # capture a single screenshot and exit
 //	screensaver --select           # interactive region selection (overlay, Windows only)
 //	screensaver --once --edit      # capture full screen and open annotation editor
@@ -19,7 +19,9 @@ import (
 	"github.com/aung-arata/screensaver/internal/capture"
 	"github.com/aung-arata/screensaver/internal/clipboard"
 	"github.com/aung-arata/screensaver/internal/editor"
+	"github.com/aung-arata/screensaver/internal/hotkey"
 	"github.com/aung-arata/screensaver/internal/overlay"
+	"github.com/aung-arata/screensaver/internal/tray"
 	"github.com/aung-arata/screensaver/internal/utils"
 )
 
@@ -160,19 +162,72 @@ func runSelect(outputPath string, openEditor bool) {
 	fmt.Println("Region screenshot copied to clipboard")
 }
 
-// runDaemon prints user-facing daemon-mode instructions and the configured hotkey.
-// The function does not start any GUI, hotkey listener, or tray; those platform-specific
-// components are implemented elsewhere and must run in a GUI environment.
-func runDaemon(hotkey string) {
-	fmt.Printf("[screensaver] Running in the background.\n")
-	fmt.Printf("  Press %s to take a screenshot.\n", hotkey)
-	fmt.Printf("  Press Ctrl+C to quit.\n")
+// runDaemon registers a global hotkey and a system tray icon then blocks
+// until the user quits via the tray menu or sends SIGTERM / Ctrl+C.
+//
+// Pressing the hotkey or choosing "Take Screenshot" from the tray opens the
+// annotation editor with a full-screen capture.  Choosing "Select Region"
+// shows the overlay selection first.
+func runDaemon(combo string) {
+	// Start the hotkey listener in a background goroutine.
+	hl := hotkey.NewListener(combo, func() { go captureAndEdit() })
+	go func() {
+		if err := hl.Start(); err != nil {
+			fmt.Fprintf(os.Stderr, "[hotkey] %v\n", err)
+		}
+	}()
 
-	// NOTE: Full GUI overlay, system tray, and hotkey listener require
-	// platform-specific Win32 APIs or a GUI toolkit (Fyne / Walk).
-	// This scaffold provides the architecture; platform-specific
-	// implementations are in internal/hotkey, internal/overlay,
-	// internal/editor, and internal/tray packages.
-	fmt.Println("[screensaver] Daemon mode requires a GUI environment (Windows/Linux/macOS).")
-	fmt.Println("[screensaver] Use --once for headless capture or --select for interactive selection.")
+	// Run the system tray (blocks until Quit is selected).
+	cfg := tray.Config{
+		Tooltip:   fmt.Sprintf("Screensaver – press %s to capture", combo),
+		OnCapture: func() { go captureAndEdit() },
+		OnSelect:  func() { go selectAndEdit() },
+		OnQuit:    func() { os.Exit(0) },
+	}
+	if err := tray.Run(cfg); err != nil {
+		fmt.Fprintf(os.Stderr, "tray: %v\n", err)
+		os.Exit(1)
+	}
+}
+
+// captureAndEdit takes a full-screen screenshot and opens the annotation
+// editor.  Errors are printed to stderr; the process is not terminated.
+func captureAndEdit() {
+	img, err := capture.FullScreen(0)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "capture: %v\n", err)
+		return
+	}
+	e := editor.New(img)
+	if err := e.Run(); err != nil {
+		fmt.Fprintf(os.Stderr, "editor: %v\n", err)
+	}
+}
+
+// selectAndEdit shows the region-selection overlay and, if the user draws a
+// rectangle, captures that region and opens the annotation editor.
+func selectAndEdit() {
+	result, err := overlay.Show(0)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "overlay: %v\n", err)
+		return
+	}
+	if result.Cancelled || result.Region.Dx() == 0 || result.Region.Dy() == 0 {
+		return
+	}
+	region := capture.Region{
+		X:      result.Region.Min.X,
+		Y:      result.Region.Min.Y,
+		Width:  result.Region.Dx(),
+		Height: result.Region.Dy(),
+	}
+	img, err := capture.CaptureRegion(region, 0)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "capture region: %v\n", err)
+		return
+	}
+	e := editor.New(img)
+	if err := e.Run(); err != nil {
+		fmt.Fprintf(os.Stderr, "editor: %v\n", err)
+	}
 }
