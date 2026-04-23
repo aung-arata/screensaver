@@ -248,7 +248,11 @@ var (
 	edProcMoveToEx          = edGdi32.NewProc("MoveToEx")
 	edProcLineTo            = edGdi32.NewProc("LineTo")
 	edProcPolyline          = edGdi32.NewProc("Polyline")
-	edProcChooseColorW      = edComDlg32.NewProc("ChooseColorW")
+	edProcChooseColorW          = edComDlg32.NewProc("ChooseColorW")
+	edProcCreateCompatibleDC    = edGdi32.NewProc("CreateCompatibleDC")
+	edProcCreateCompatibleBitmap = edGdi32.NewProc("CreateCompatibleBitmap")
+	edProcBitBlt                = edGdi32.NewProc("BitBlt")
+	edProcDeleteDC              = edGdi32.NewProc("DeleteDC")
 )
 
 // ---------------------------------------------------------------------------
@@ -465,6 +469,9 @@ func editorWndProc(hwnd, msg, wParam, lParam uintptr) uintptr {
 	case edWmLButtonDown:
 		x, y := int32(edLoWord(lParam)), int32(edHiWord(lParam))
 		if y < toolbarHeight {
+			if id := toolbarHitTest(x, y); id != 0 {
+				handleToolbarCommand(hwnd, id)
+			}
 			return 0
 		}
 		ix, iy := canvasToImage(x, y)
@@ -610,13 +617,23 @@ func paintEditor(hwnd, hdc uintptr) {
 		edState.frameDirty = false
 	}
 
+	// Create an off-screen memory DC for double-buffering to prevent flicker.
+	memDC, _, _ := edProcCreateCompatibleDC.Call(hdc)
+	memBmp, _, _ := edProcCreateCompatibleBitmap.Call(hdc, uintptr(clientW), uintptr(clientH))
+	oldBmp, _, _ := edProcSelectObject.Call(memDC, memBmp)
+	defer func() {
+		edProcSelectObject.Call(memDC, oldBmp)
+		edProcDeleteObject.Call(memBmp)
+		edProcDeleteDC.Call(memDC)
+	}()
+
 	// ---------- canvas ----------
 
 	// Fill canvas background (black).
 	canvasTop := toolbarHeight
 	brushBlack, _, _ := edProcCreateSolidBrush.Call(0x00000000)
 	canvasR := edRect{0, canvasTop, clientW, clientH}
-	edProcFillRect.Call(hdc, uintptr(unsafe.Pointer(&canvasR)), brushBlack)
+	edProcFillRect.Call(memDC, uintptr(unsafe.Pointer(&canvasR)), brushBlack)
 	edProcDeleteObject.Call(brushBlack)
 
 	// Blit the (possibly scaled) cached image.
@@ -632,7 +649,7 @@ func paintEditor(hwnd, hdc uintptr) {
 			},
 		}
 		edProcStretchDIBits.Call(
-			hdc,
+			memDC,
 			uintptr(edState.imgX), uintptr(edState.imgY),
 			uintptr(edState.imgW), uintptr(edState.imgH),
 			0, 0,
@@ -645,11 +662,14 @@ func paintEditor(hwnd, hdc uintptr) {
 
 	// Draw live drag preview using GDI (no gg re-render needed).
 	if edState.dragging {
-		drawDragPreview(hdc)
+		drawDragPreview(memDC)
 	}
 
 	// ---------- toolbar ----------
-	drawToolbar(hdc, clientW)
+	drawToolbar(memDC, clientW)
+
+	// Blit the completed frame to the real window DC in one atomic operation.
+	edProcBitBlt.Call(hdc, 0, 0, uintptr(clientW), uintptr(clientH), memDC, 0, 0, edSrcCopy)
 }
 
 // drawDragPreview draws the in-progress annotation using GDI.
@@ -695,17 +715,18 @@ func drawDragPreview(hdc uintptr) {
 type toolbarBtn struct {
 	id   int
 	text string
+	tool Tool // non-zero only for the four drawing tools
 }
 
 var toolbarBtns = []toolbarBtn{
-	{idBtnPen, "Pen"},
-	{idBtnRect, "Rect"},
-	{idBtnArrow, "Arrow"},
-	{idBtnText, "Text"},
-	{idBtnColor, "Color"},
-	{idBtnUndo, "Undo"},
-	{idBtnCopy, "Copy"},
-	{idBtnSave, "Save"},
+	{idBtnPen, "Pen", ToolPen},
+	{idBtnRect, "Rect", ToolRect},
+	{idBtnArrow, "Arrow", ToolArrow},
+	{idBtnText, "Text", ToolText},
+	{idBtnColor, "Color", ""},
+	{idBtnUndo, "Undo", ""},
+	{idBtnCopy, "Copy", ""},
+	{idBtnSave, "Save", ""},
 }
 
 // toolbarBtnRect returns the bounding rectangle of button at position i.
@@ -738,7 +759,7 @@ func drawToolbar(hdc uintptr, clientW int32) {
 
 	for i, btn := range toolbarBtns {
 		r := toolbarBtnRect(i)
-		active := (btn.id >= idBtnPen && btn.id <= idBtnText) && Tool(btn.text) == edState.activeTool
+		active := btn.tool != "" && btn.tool == edState.activeTool
 
 		// Button fill: blue for active tool, white for others; use current
 		// colour swatch for the Color button.
