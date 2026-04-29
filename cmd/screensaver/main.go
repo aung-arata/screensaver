@@ -8,6 +8,8 @@
 //	screensaver --once --edit      # capture full screen and open annotation editor
 //	screensaver --select --edit    # select a region and open annotation editor (Windows only)
 //	screensaver --hotkey "ctrl+shift+p"  # use a custom hotkey
+//	screensaver --once --save-dir /path  # auto-save to directory with timestamped filename
+//	screensaver --select --save-dir /path  # select region and auto-save to directory
 package main
 
 import (
@@ -29,6 +31,27 @@ import (
 // Version is the application version, set at build time via ldflags.
 var Version = "0.2.0"
 
+// lastSavedPath holds the path of the most recently saved screenshot.
+// It is updated on every successful save (from the editor or CLI flags).
+var (
+	lastSavedPath   string
+	lastSavedPathMu sync.Mutex
+)
+
+// setLastSavedPath stores path as the most recently saved screenshot path.
+func setLastSavedPath(path string) {
+	lastSavedPathMu.Lock()
+	lastSavedPath = path
+	lastSavedPathMu.Unlock()
+}
+
+// getLastSavedPath returns the most recently saved screenshot path.
+func getLastSavedPath() string {
+	lastSavedPathMu.Lock()
+	defer lastSavedPathMu.Unlock()
+	return lastSavedPath
+}
+
 // main is the entry point for the screensaver CLI.
 // It parses command-line flags and dispatches the selected mode:
 // - --version: prints the build-time Version and exits.
@@ -38,11 +61,12 @@ var Version = "0.2.0"
 // The --output flag, when provided with --once or --select, saves the captured image to the given path.
 // The --edit flag, when combined with --once or --select, opens the annotation editor after capture.
 func main() {
-	once := flag.Bool("once", false, "Capture one screenshot and exit (no background daemon)")
-	sel := flag.Bool("select", false, "Interactive region selection: dims the screen and lets you drag a rectangle")
-	hotkey := flag.String("hotkey", "ctrl+shift+s", "Global hotkey combination (e.g. 'ctrl+shift+s')")
-	output := flag.String("output", "", "Save screenshot to this path (only with --once or --select)")
-	edit := flag.Bool("edit", false, "Open the annotation editor after capture (use with --once or --select)")
+	once    := flag.Bool("once", false, "Capture one screenshot and exit (no background daemon)")
+	sel     := flag.Bool("select", false, "Interactive region selection: dims the screen and lets you drag a rectangle")
+	hotkey  := flag.String("hotkey", "ctrl+shift+s", "Global hotkey combination (e.g. 'ctrl+shift+s')")
+	output  := flag.String("output", "", "Save screenshot to this path (only with --once or --select)")
+	saveDir := flag.String("save-dir", "", "Auto-save to this directory with a timestamped filename (only with --once or --select, ignored when --output is set)")
+	edit    := flag.Bool("edit", false, "Open the annotation editor after capture (use with --once or --select)")
 	version := flag.Bool("version", false, "Print version and exit")
 	flag.Parse()
 
@@ -52,12 +76,12 @@ func main() {
 	}
 
 	if *sel {
-		runSelect(*output, *edit)
+		runSelect(*output, *edit, *saveDir)
 		return
 	}
 
 	if *once {
-		runOnce(*output, *edit)
+		runOnce(*output, *edit, *saveDir)
 		return
 	}
 
@@ -68,6 +92,7 @@ func main() {
 // On error it writes to stderr and exits with status 1.
 func openEditorAndExit(img image.Image) {
 	e := editor.New(img)
+	e.OnSave = func(p string) { setLastSavedPath(p) }
 	if err := e.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "error running editor: %v\n", err)
 		os.Exit(1)
@@ -76,9 +101,10 @@ func openEditorAndExit(img image.Image) {
 
 // runOnce captures a full-screen screenshot and saves it to outputPath or copies it to the clipboard.
 // If openEditor is true the annotation editor is opened instead of the default copy/save behaviour.
-// If outputPath is non-empty the image is written there; otherwise the image is copied to the clipboard.
+// If outputPath is non-empty the image is written there; otherwise if saveDir is non-empty the image
+// is auto-saved with a timestamped filename; otherwise the image is copied to the clipboard.
 // On error it writes a message to stderr and exits the process with status 1.
-func runOnce(outputPath string, openEditor bool) {
+func runOnce(outputPath string, openEditor bool, saveDir string) {
 	img, err := capture.FullScreen(0)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
@@ -95,7 +121,23 @@ func runOnce(outputPath string, openEditor bool) {
 			fmt.Fprintf(os.Stderr, "error saving image: %v\n", err)
 			os.Exit(1)
 		}
+		setLastSavedPath(outputPath)
 		fmt.Printf("Screenshot saved to %s\n", outputPath)
+		return
+	}
+
+	if saveDir != "" {
+		path, err := utils.GenerateFilename(saveDir, "png")
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error generating filename: %v\n", err)
+			os.Exit(1)
+		}
+		if err := utils.SaveImage(img, path); err != nil {
+			fmt.Fprintf(os.Stderr, "error saving image: %v\n", err)
+			os.Exit(1)
+		}
+		setLastSavedPath(path)
+		fmt.Printf("Screenshot saved to %s\n", path)
 		return
 	}
 
@@ -109,11 +151,12 @@ func runOnce(outputPath string, openEditor bool) {
 
 // runSelect displays a fullscreen region-selection overlay that lets the user draw a rectangle,
 // captures the selected area, and either opens the annotation editor (if openEditor is true),
-// saves the resulting image to outputPath, or copies it to the clipboard. If outputPath is
-// non-empty the image is written to that path; otherwise it is copied to the clipboard. If the
-// user cancels selection the function returns without producing an image; on capture, save, or
-// clipboard errors the process prints an error to stderr and exits with status 1.
-func runSelect(outputPath string, openEditor bool) {
+// saves the resulting image to outputPath, auto-saves to saveDir, or copies it to the clipboard.
+// If outputPath is non-empty the image is written to that path; otherwise if saveDir is non-empty
+// the image is auto-saved with a timestamped filename; otherwise it is copied to the clipboard.
+// If the user cancels selection the function returns without producing an image; on capture, save,
+// or clipboard errors the process prints an error to stderr and exits with status 1.
+func runSelect(outputPath string, openEditor bool, saveDir string) {
 	result, err := overlay.Show(0)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
@@ -152,7 +195,23 @@ func runSelect(outputPath string, openEditor bool) {
 			fmt.Fprintf(os.Stderr, "error saving image: %v\n", err)
 			os.Exit(1)
 		}
+		setLastSavedPath(outputPath)
 		fmt.Printf("Screenshot saved to %s\n", outputPath)
+		return
+	}
+
+	if saveDir != "" {
+		path, err := utils.GenerateFilename(saveDir, "png")
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error generating filename: %v\n", err)
+			os.Exit(1)
+		}
+		if err := utils.SaveImage(img, path); err != nil {
+			fmt.Fprintf(os.Stderr, "error saving image: %v\n", err)
+			os.Exit(1)
+		}
+		setLastSavedPath(path)
+		fmt.Printf("Screenshot saved to %s\n", path)
 		return
 	}
 
@@ -184,10 +243,11 @@ func runDaemon(combo string) {
 
 	// Run the system tray (blocks until Quit is selected).
 	cfg := tray.Config{
-		Tooltip:   fmt.Sprintf("Screensaver – press %s to capture", combo),
-		OnCapture: func() { go captureAndEdit() },
-		OnSelect:  func() { go selectAndEdit() },
-		OnQuit:    closeQuit,
+		Tooltip:    fmt.Sprintf("Screensaver – press %s to capture", combo),
+		OnCapture:  func() { go captureAndEdit() },
+		OnSelect:   func() { go selectAndEdit() },
+		OnOpenLast: func() { go openLastScreenshot(getLastSavedPath()) },
+		OnQuit:     closeQuit,
 	}
 	go func() {
 		if err := tray.Run(cfg); err != nil {
@@ -209,6 +269,7 @@ func captureAndEdit() {
 		return
 	}
 	e := editor.New(img)
+	e.OnSave = func(p string) { setLastSavedPath(p) }
 	if err := e.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "editor: %v\n", err)
 	}
@@ -237,6 +298,7 @@ func selectAndEdit() {
 		return
 	}
 	e := editor.New(img)
+	e.OnSave = func(p string) { setLastSavedPath(p) }
 	if err := e.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "editor: %v\n", err)
 	}
