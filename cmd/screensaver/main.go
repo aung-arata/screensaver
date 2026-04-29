@@ -65,7 +65,7 @@ func main() {
 	sel     := flag.Bool("select", false, "Interactive region selection: dims the screen and lets you drag a rectangle")
 	hotkey  := flag.String("hotkey", "ctrl+shift+s", "Global hotkey combination (e.g. 'ctrl+shift+s')")
 	output  := flag.String("output", "", "Save screenshot to this path (only with --once or --select)")
-	saveDir := flag.String("save-dir", "", "Auto-save to this directory with a timestamped filename (only with --once or --select, ignored when --output is set)")
+	saveDir := flag.String("save-dir", "", "Auto-save to this directory with a timestamped filename (only with --once or --select; --output takes precedence when both are set)")
 	edit    := flag.Bool("edit", false, "Open the annotation editor after capture (use with --once or --select)")
 	version := flag.Bool("version", false, "Print version and exit")
 	flag.Parse()

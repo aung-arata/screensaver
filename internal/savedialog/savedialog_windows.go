@@ -13,8 +13,8 @@ import (
 // Win32 OPENFILENAMEW flags.
 const (
 	ofnOverwritePrompt = 0x00000002
-	ofnPathmustexist   = 0x00000800
-	ofnNochangedir     = 0x00000008
+	ofnPathMustExist   = 0x00000800
+	ofnNoChangeDir     = 0x00000008
 	maxPath            = 260
 )
 
@@ -98,7 +98,7 @@ func ShowSaveDialog(ownerHWND uintptr, defaultDir string) (string, error) {
 		NMaxFile:    maxPath,
 		LpstrTitle:  uintptr(unsafe.Pointer(title)),
 		LpstrDefExt: uintptr(unsafe.Pointer(defExt)),
-		Flags:       ofnOverwritePrompt | ofnPathmustexist | ofnNochangedir,
+		Flags:       ofnOverwritePrompt | ofnPathMustExist | ofnNoChangeDir,
 	}
 
 	if defaultDir != "" {
