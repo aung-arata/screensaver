@@ -5,6 +5,7 @@ package savedialog
 
 import (
 	"fmt"
+	"runtime"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
@@ -50,8 +51,9 @@ type openFileName struct {
 var _ [152]byte = [unsafe.Sizeof(openFileName{})]byte{}
 
 var (
-	sdComdlg32        = windows.NewLazySystemDLL("comdlg32.dll")
-	sdGetSaveFileName = sdComdlg32.NewProc("GetSaveFileNameW")
+	sdComdlg32              = windows.NewLazySystemDLL("comdlg32.dll")
+	sdGetSaveFileName       = sdComdlg32.NewProc("GetSaveFileNameW")
+	sdCommDlgExtendedError  = sdComdlg32.NewProc("CommDlgExtendedError")
 )
 
 // buildFilterUTF16 returns a double-null-terminated UTF-16 filter string
@@ -74,7 +76,7 @@ func buildFilterUTF16(pairs [][2]string) []uint16 {
 func ShowSaveDialog(ownerHWND uintptr, defaultDir string) (string, error) {
 	filter := buildFilterUTF16([][2]string{
 		{"PNG Image", "*.png"},
-		{"JPEG Image", "*.jpg"},
+		{"JPEG Image", "*.jpg;*.jpeg"},
 		{"All Files", "*.*"},
 	})
 
@@ -101,8 +103,9 @@ func ShowSaveDialog(ownerHWND uintptr, defaultDir string) (string, error) {
 		Flags:       ofnOverwritePrompt | ofnPathMustExist | ofnNoChangeDir,
 	}
 
+	var initialDir *uint16
 	if defaultDir != "" {
-		initialDir, err := windows.UTF16PtrFromString(defaultDir)
+		initialDir, err = windows.UTF16PtrFromString(defaultDir)
 		if err != nil {
 			return "", fmt.Errorf("savedialog: encoding initial dir: %w", err)
 		}
@@ -110,10 +113,24 @@ func ShowSaveDialog(ownerHWND uintptr, defaultDir string) (string, error) {
 	}
 
 	ret, _, _ := sdGetSaveFileName.Call(uintptr(unsafe.Pointer(&ofn)))
+	// Keep all Go-allocated memory alive until after the syscall returns so the
+	// GC cannot collect objects that are only referenced via uintptr fields.
+	runtime.KeepAlive(filter)
+	runtime.KeepAlive(fileBuf)
+	runtime.KeepAlive(title)
+	runtime.KeepAlive(defExt)
+	runtime.KeepAlive(initialDir)
+
 	if ret == 0 {
-		// User cancelled (or an error occurred — cancellation is the common case).
-		return "", nil
+		// Distinguish user cancellation from a real error via CommDlgExtendedError.
+		code, _, _ := sdCommDlgExtendedError.Call()
+		if code == 0 {
+			// code == 0 means the user simply cancelled — not an error.
+			return "", nil
+		}
+		return "", fmt.Errorf("savedialog: GetSaveFileNameW failed: CommDlgExtendedError=0x%04x", code)
 	}
 
 	return windows.UTF16ToString(fileBuf), nil
 }
+

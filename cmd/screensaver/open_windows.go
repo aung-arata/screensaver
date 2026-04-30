@@ -3,6 +3,7 @@
 package main
 
 import (
+	"runtime"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
@@ -22,9 +23,22 @@ func openLastScreenshot(path string) {
 		msg, _ := windows.UTF16PtrFromString("No screenshot taken yet.")
 		title, _ := windows.UTF16PtrFromString("Open Last Screenshot")
 		openProcMessageBoxW.Call(0, uintptr(unsafe.Pointer(msg)), uintptr(unsafe.Pointer(title)), 0)
+		runtime.KeepAlive(msg)
+		runtime.KeepAlive(title)
 		return
 	}
 	verb, _ := windows.UTF16PtrFromString("open")
 	pathPtr, _ := windows.UTF16PtrFromString(path)
-	openProcShellExecuteW.Call(0, uintptr(unsafe.Pointer(verb)), uintptr(unsafe.Pointer(pathPtr)), 0, 0, 1)
+	ret, _, _ := openProcShellExecuteW.Call(0, uintptr(unsafe.Pointer(verb)), uintptr(unsafe.Pointer(pathPtr)), 0, 0, 1)
+	// Keep the Go allocations alive until after the syscall returns.
+	runtime.KeepAlive(verb)
+	runtime.KeepAlive(pathPtr)
+	// ShellExecuteW returns an HINSTANCE; values <= 32 indicate failure.
+	if ret <= 32 {
+		errMsg, _ := windows.UTF16PtrFromString("Failed to open screenshot:\n" + path)
+		title, _ := windows.UTF16PtrFromString("Open Last Screenshot")
+		openProcMessageBoxW.Call(0, uintptr(unsafe.Pointer(errMsg)), uintptr(unsafe.Pointer(title)), 0)
+		runtime.KeepAlive(errMsg)
+		runtime.KeepAlive(title)
+	}
 }

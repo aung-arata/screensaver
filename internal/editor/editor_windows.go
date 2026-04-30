@@ -985,6 +985,7 @@ func doSave() {
 	path, err := savedialog.ShowSaveDialog(edState.hwnd, "")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "[editor] ShowSaveDialog: %v\n", err)
+		edShowMessage(edState.hwnd, fmt.Sprintf("Save dialog failed: %v", err))
 		return
 	}
 	if path == "" {
