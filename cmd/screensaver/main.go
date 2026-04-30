@@ -70,7 +70,7 @@ func getLastSavedPath() string {
 func main() {
 	once       := flag.Bool("once", false, "Capture one screenshot and exit (no background daemon)")
 	sel        := flag.Bool("select", false, "Interactive region selection: dims the screen and lets you drag a rectangle")
-	hotkeyFlag := flag.String("hotkey", "", "Global hotkey combination (e.g. 'ctrl+shift+s')")
+	hotkeyFlag := flag.String("hotkey", "", "Global hotkey combination (e.g. 'ctrl+shift+s'); overrides config file; defaults to config value or 'ctrl+shift+s'")
 	output     := flag.String("output", "", "Save screenshot to this path (only with --once or --select)")
 	saveDir    := flag.String("save-dir", "", "Auto-save to this directory with a timestamped filename (only with --once or --select; --output takes precedence when both are set)")
 	edit       := flag.Bool("edit", false, "Open the annotation editor after capture (use with --once or --select)")
@@ -366,7 +366,7 @@ func runConfigCmd(args []string, configFilePath string, effectiveCfg config.Conf
 
 	switch args[0] {
 	case "show":
-		data, err := config.MarshalYAML(effectiveCfg)
+		data, err := config.EncodeYAML(effectiveCfg)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "error encoding config: %v\n", err)
 			os.Exit(1)

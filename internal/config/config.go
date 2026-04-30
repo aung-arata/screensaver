@@ -127,7 +127,7 @@ func Merge(base Config, overrides Config) Config {
 	return result
 }
 
-// MarshalYAML encodes cfg as YAML bytes.
-func MarshalYAML(cfg Config) ([]byte, error) {
+// EncodeYAML encodes cfg as YAML bytes.
+func EncodeYAML(cfg Config) ([]byte, error) {
 	return yaml.Marshal(cfg)
 }

@@ -55,7 +55,7 @@ func GenerateFilename(dir, format string) (string, error) {
 }
 
 // SaveImage saves img to path using the given JPEG quality (1–100).
-// Quality is ignored for PNG. If quality is 0, defaults to 90.
+// Quality is ignored for PNG. Pass 0 to use the default quality (90).
 // If path is empty, an auto-generated path is used. The format is inferred
 // from the file extension (.png or .jpg/.jpeg).
 func SaveImage(img image.Image, path string, quality int) error {
