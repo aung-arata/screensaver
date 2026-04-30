@@ -14,7 +14,7 @@ import (
 
 	"golang.org/x/sys/windows"
 
-	"github.com/aung-arata/screensaver/internal/utils"
+	"github.com/aung-arata/screensaver/internal/savedialog"
 )
 
 // ---------------------------------------------------------------------------
@@ -982,16 +982,22 @@ func doCopy() {
 }
 
 func doSave() {
-	path, err := utils.GenerateFilename("", "png")
+	path, err := savedialog.ShowSaveDialog(edState.hwnd, "")
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "[editor] GenerateFilename: %v\n", err)
-		edShowMessage(edState.hwnd, "Save failed: could not generate filename.")
+		fmt.Fprintf(os.Stderr, "[editor] ShowSaveDialog: %v\n", err)
+		edShowMessage(edState.hwnd, fmt.Sprintf("Save dialog failed: %v", err))
 		return
+	}
+	if path == "" {
+		return // user cancelled
 	}
 	if err := edState.ed.Save(path); err != nil {
 		fmt.Fprintf(os.Stderr, "[editor] Save: %v\n", err)
 		edShowMessage(edState.hwnd, fmt.Sprintf("Save failed: %v", err))
 		return
+	}
+	if edState.ed.OnSave != nil {
+		edState.ed.OnSave(path)
 	}
 	edShowMessage(edState.hwnd, fmt.Sprintf("Saved to %s", path))
 }

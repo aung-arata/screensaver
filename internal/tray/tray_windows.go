@@ -56,9 +56,10 @@ const (
 	mfGrayed    = 0x00000001
 
 	// Menu item IDs
-	idTrayCapture = 1001
-	idTraySelect  = 1002
-	idTrayQuit    = 1003
+	idTrayCapture  = 1001
+	idTraySelect   = 1002
+	idTrayOpenLast = 1003
+	idTrayQuit     = 1004
 
 	// ShowWindow
 	traySwHide = 0
@@ -270,6 +271,10 @@ func trayWndProc(hwnd, msg, wParam, lParam uintptr) uintptr {
 			if trayState.cfg.OnSelect != nil {
 				go trayState.cfg.OnSelect()
 			}
+		case idTrayOpenLast:
+			if trayState.cfg.OnOpenLast != nil {
+				go trayState.cfg.OnOpenLast()
+			}
 		case idTrayQuit:
 			// DestroyWindow triggers WM_DESTROY → PostQuitMessage → message
 			// loop exits → icon is deleted once after the loop in runPlatform.
@@ -299,10 +304,12 @@ func showTrayMenu(hwnd uintptr) {
 
 	captureText, _ := windows.UTF16PtrFromString("Take Screenshot")
 	selectText, _ := windows.UTF16PtrFromString("Select Region")
+	openLastText, _ := windows.UTF16PtrFromString("Open Last Screenshot")
 	quitText, _ := windows.UTF16PtrFromString("Quit")
 
 	trayProcAppendMenuW.Call(hMenu, mfString, idTrayCapture, uintptr(unsafe.Pointer(captureText)))
 	trayProcAppendMenuW.Call(hMenu, mfString, idTraySelect, uintptr(unsafe.Pointer(selectText)))
+	trayProcAppendMenuW.Call(hMenu, mfString, idTrayOpenLast, uintptr(unsafe.Pointer(openLastText)))
 	trayProcAppendMenuW.Call(hMenu, mfSeparator, 0, 0)
 	trayProcAppendMenuW.Call(hMenu, mfString, idTrayQuit, uintptr(unsafe.Pointer(quitText)))
 

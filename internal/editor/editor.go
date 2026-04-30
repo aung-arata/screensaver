@@ -189,8 +189,11 @@ func DefaultConfig() Config {
 // Editor holds a captured image and a stack of annotations that can be
 // rendered, undone, copied to the clipboard, or saved to disk.
 type Editor struct {
-	Image       image.Image
-	Config      Config
+	Image  image.Image
+	Config Config
+	// OnSave is an optional callback invoked with the saved file path after a
+	// successful Save call from the annotation editor GUI.  May be nil.
+	OnSave      func(path string)
 	annotations []Annotation
 }
 

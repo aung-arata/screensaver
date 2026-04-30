@@ -6,9 +6,7 @@
 
 ## 🚧 In Progress (Windows)
 
-- **Global hotkey daemon** — complete `hotkey_windows.go` with `RegisterHotKey` + Win32 message loop
-- **System tray icon** — finish `tray/tray.go` with context menu (Capture, Region, Open Last, Settings, Quit) + capture notification
-- **Interactive annotation editor GUI** — Fyne or raw Win32 toolbar with Pen, Rectangle, Arrow, Text, Color picker, Undo/Redo
+*(All Windows-first items listed below have been completed — see ✅ Completed.)*
 
 ---
 
@@ -43,6 +41,11 @@
 - Post-capture annotation editor (render layer)
 - Pen, Rectangle, Arrow, Text annotation
 - Undo
+- **Global hotkey daemon** (Windows) — `RegisterHotKey` + Win32 message loop
+- **System tray icon** (Windows) — Shell_NotifyIcon with context menu
+- **Interactive annotation editor GUI** (Windows) — native Win32 toolbar (Pen, Rect, Arrow, Text, Color, Undo, Copy, Save)
+- **Native save-location picker dialog** (Windows) — `GetSaveFileNameW` via `comdlg32.dll`
+- **"Open Last Screenshot" from tray** (Windows) — `ShellExecuteW` opens last saved file in default viewer
 
 ---
 
