@@ -12,10 +12,9 @@
 
 ## 🗓 Planned (Windows)
 
-- **Config file support** (`%APPDATA%\screensaver\config.yaml`) — hotkey, save path, format, upload target
-- **Upload / share integration** — Imgur or S3 upload, returns shareable URL to clipboard
-- **Capture history** — local JSON index, `--history` flag, `--open last`
-- **Output format expansion** — WebP support, JPEG quality flag, short GIF/screen recording
+- **Upload / share integration** — Imgur or S3 upload, returns shareable URL to clipboard *(requires Config — now done)*
+- **Capture history** — local JSON index, `--history` flag, `--open last` *(requires Config — now done)*
+- **Output format expansion** — WebP support, short GIF/screen recording
 - **Scrolling / long-page capture** — stitch multiple captures of a scrollable region
 - **Post-capture plugin hooks** — `--after-capture "cmd"` for external workflow integration
 - **Structured logging / debug mode** — `--debug` flag using `log/slog`
@@ -46,6 +45,7 @@
 - **Interactive annotation editor GUI** (Windows) — native Win32 toolbar (Pen, Rect, Arrow, Text, Color, Undo, Copy, Save)
 - **Native save-location picker dialog** (Windows) — `GetSaveFileNameW` via `comdlg32.dll`
 - **"Open Last Screenshot" from tray** (Windows) — `ShellExecuteW` opens last saved file in default viewer
+- **Config file support** — `%APPDATA%\screensaver\config.yaml` on Windows (`~/.screensaver/config.yaml` fallback); hotkey, save path, format, quality; `--format`, `--quality`, `--config` flags; `config show/init/path` subcommand
 
 ---
 

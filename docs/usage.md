@@ -81,3 +81,51 @@ screensaver --hotkey "ctrl+shift+p"
 ```bash
 screensaver --version
 ```
+
+---
+
+## Config file
+
+Screensaver reads settings from a YAML config file on startup. CLI flags always override config file values.
+
+**File locations:**
+
+| Platform | Path |
+|----------|------|
+| Windows  | `%APPDATA%\screensaver\config.yaml` |
+| Other    | `~/.screensaver/config.yaml` |
+
+**Supported keys and defaults:**
+
+```yaml
+hotkey: ctrl+shift+s          # Global hotkey for daemon mode
+save_dir: ""                  # Auto-save directory (empty = ~/Pictures/Screenshots)
+format: png                   # Output format: "png" or "jpeg"
+quality: 90                   # JPEG quality 1–100 (ignored for PNG)
+```
+
+### Flags that override config
+
+| Flag | Config key | Description |
+|------|-----------|-------------|
+| `--hotkey` | `hotkey` | Global hotkey combination |
+| `--save-dir` | `save_dir` | Auto-save directory |
+| `--format` | `format` | Output format (`png` or `jpeg`) |
+| `--quality` | `quality` | JPEG quality 1–100 |
+| `--config` | — | Path to a custom config file |
+
+### Config subcommand
+
+```bash
+# Print current effective config (file + defaults merged) as YAML
+screensaver config show
+
+# Write default config to the config file (errors if file already exists)
+screensaver config init
+
+# Overwrite an existing config with defaults
+screensaver config init --force
+
+# Print the config file path
+screensaver config path
+```
