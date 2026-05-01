@@ -251,7 +251,7 @@ func (e *Editor) Save(path string) error {
 	if err != nil {
 		return fmt.Errorf("rendering annotations: %w", err)
 	}
-	return utils.SaveImage(img, path)
+	return utils.SaveImage(img, path, 0)
 }
 
 // Run opens the annotation editor window.

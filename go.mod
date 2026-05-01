@@ -6,6 +6,7 @@ require (
 	github.com/fogleman/gg v1.3.0
 	github.com/kbinani/screenshot v0.0.0-20250624051815-089614a94018
 	golang.org/x/sys v0.24.0
+	gopkg.in/yaml.v3 v3.0.1
 )
 
 require (

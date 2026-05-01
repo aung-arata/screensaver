@@ -101,7 +101,7 @@ func TestSaveImage_ExplicitPath(t *testing.T) {
 	img := makeTestImage(100, 80)
 	dest := filepath.Join(t.TempDir(), "test.png")
 
-	if err := SaveImage(img, dest); err != nil {
+	if err := SaveImage(img, dest, 0); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
@@ -114,7 +114,7 @@ func TestSaveImage_JPEGFormat(t *testing.T) {
 	img := makeTestImage(100, 80)
 	dest := filepath.Join(t.TempDir(), "out.jpg")
 
-	if err := SaveImage(img, dest); err != nil {
+	if err := SaveImage(img, dest, 0); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
@@ -127,7 +127,7 @@ func TestSaveImage_AutoPath(t *testing.T) {
 	img := makeTestImage(50, 50)
 
 	// Use an empty path — should auto-generate.
-	err := SaveImage(img, "")
+	err := SaveImage(img, "", 0)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

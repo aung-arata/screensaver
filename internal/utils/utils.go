@@ -30,7 +30,7 @@ func DefaultSaveDirectory() (string, error) {
 
 // GenerateFilename returns a timestamped filename inside the given directory.
 // If dir is empty, DefaultSaveDirectory is used.
-// The format should be "png" or "jpeg".
+// The format should be "png" or "jpeg"; any other value defaults to "png".
 func GenerateFilename(dir, format string) (string, error) {
 	if dir == "" {
 		d, err := DefaultSaveDirectory()
@@ -38,6 +38,10 @@ func GenerateFilename(dir, format string) (string, error) {
 			return "", err
 		}
 		dir = d
+	}
+
+	if format != "png" && format != "jpeg" {
+		format = "png"
 	}
 
 	ext := format
@@ -50,16 +54,21 @@ func GenerateFilename(dir, format string) (string, error) {
 	return filepath.Join(dir, name), nil
 }
 
-// SaveImage saves the image to the given path. If path is empty, an
-// auto-generated path is used. The format is inferred from the file
-// extension (.png or .jpg/.jpeg).
-func SaveImage(img image.Image, path string) error {
+// SaveImage saves img to path using the given JPEG quality (1–100).
+// Quality is ignored for PNG. Pass 0 to use the default quality (90).
+// If path is empty, an auto-generated path is used. The format is inferred
+// from the file extension (.png or .jpg/.jpeg).
+func SaveImage(img image.Image, path string, quality int) error {
 	if path == "" {
 		p, err := GenerateFilename("", "png")
 		if err != nil {
 			return err
 		}
 		path = p
+	}
+
+	if quality <= 0 {
+		quality = 90
 	}
 
 	f, err := os.Create(path)
@@ -71,7 +80,7 @@ func SaveImage(img image.Image, path string) error {
 	ext := strings.ToLower(filepath.Ext(path))
 	switch ext {
 	case ".jpg", ".jpeg":
-		return jpeg.Encode(f, img, &jpeg.Options{Quality: 90})
+		return jpeg.Encode(f, img, &jpeg.Options{Quality: quality})
 	default:
 		return png.Encode(f, img)
 	}
