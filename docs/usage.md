@@ -1,86 +1,160 @@
 # Usage
 
-## One-shot mode (capture full screen)
+## Quick reference
 
-```bash
+| Flag | Mode | Description |
+|------|------|-------------|
+| *(none)* | daemon | Background daemon with hotkey + tray icon |
+| `--once` | one-shot | Capture full screen and exit |
+| `--select` | one-shot | Interactive region selection and exit |
+| `--edit` | modifier | Open annotation editor after capture (combine with `--once` or `--select`) |
+| `--output <path>` | modifier | Save to explicit file path (combine with `--once` or `--select`) |
+| `--save-dir <dir>` | modifier | Auto-save to directory with timestamped filename |
+| `--hotkey <combo>` | daemon | Override hotkey (default: `ctrl+shift+s`) |
+| `--format <fmt>` | any | Output format: `png` or `jpeg` (default from config, fallback `png`) |
+| `--quality <n>` | any | JPEG quality 1–100 (default from config, fallback 90; ignored for PNG) |
+| `--config <path>` | any | Use a custom config file instead of the default location |
+| `--install` | utility | Register for Windows autostart (HKCU Run) and exit |
+| `--uninstall` | utility | Remove from Windows autostart and exit |
+| `--history` | utility | List recent screenshots and exit |
+| `--history-n <n>` | utility | Number of entries to show with `--history` (default 20) |
+| `--history-clear` | utility | Clear all screenshot history and exit |
+| `--version` | utility | Print version and exit |
+
+---
+
+## One-shot mode (full screen)
+
+```powershell
 # Copy screenshot to clipboard
 screensaver --once
 
-# Save screenshot to a file
+# Save screenshot to an explicit path
 screensaver --once --output screenshot.png
+
+# Auto-save to a directory with a timestamped filename
+screensaver --once --save-dir C:\Users\You\Pictures
 
 # Open annotation editor after capture
 screensaver --once --edit
+
+# Capture as JPEG at quality 85
+screensaver --once --format jpeg --quality 85 --save-dir C:\Screenshots
 ```
 
 ---
 
 ## Interactive region selection (Windows only)
 
-```bash
+```powershell
 # Select a region and copy to clipboard
 screensaver --select
 
-# Select a region and save to a file
-screensaver --select --output region.png
+# Select a region and save to a directory
+screensaver --select --save-dir C:\Screenshots
 
 # Select a region and open the annotation editor
 screensaver --select --edit
 ```
 
 The screen dims and a crosshair cursor appears. Click and drag to select the
-region you want to capture. Release the mouse to capture the selection, or
-press **Escape** to cancel.
+region you want to capture. Release to capture, or press **Escape** to cancel.
 
 > **Note:** `--select` requires Windows (Win32 APIs). On non-Windows platforms
-> the command returns a "not yet implemented" error (see `overlay_stub.go`).
+> the command returns a "not yet implemented" error.
 
 ---
 
-## Annotation editor
+## Annotation editor (Windows)
 
-Pass `--edit` together with `--once` or `--select` to open the post-capture
-annotation editor:
+The editor opens automatically in daemon mode after every capture. It can also
+be opened from the one-shot modes using `--edit`:
 
-```bash
-screensaver --once --edit        # full-screen capture + editor
-screensaver --select --edit      # region selection + editor (Windows only)
+```powershell
+screensaver --once --edit
+screensaver --select --edit
 ```
 
-> **Note:** `--edit` must be combined with `--once` or `--select`.  Using
-> `--edit` alone has no effect — the tool falls back to daemon mode and the
-> flag is ignored.
+**Toolbar actions:**
 
-The editor renders annotations (pen strokes, rectangles, arrows, text) onto
-the captured image using `fogleman/gg` and saves the result to a timestamped
-PNG file.  An interactive GUI toolbar (pen / rectangle / arrow / text tools,
-Copy and Save buttons) is in progress.
+| Button / Key | Action |
+|---|---|
+| `P` or Pen button | Freehand pen stroke |
+| `R` or Rect button | Hollow rectangle |
+| `A` or Arrow button | Arrow with arrowhead |
+| `T` or Text button | Text annotation |
+| Color button | Pick annotation colour |
+| Undo / `Ctrl+Z` | Remove last annotation |
+| Copy | Copy annotated image to clipboard |
+| Save | Save annotated image via file dialog |
+| `Ctrl+0` | Fit image to window |
+| `Ctrl+1` | 1:1 actual pixels |
+| `+` / `-` | Step zoom in / out |
+| Mouse wheel | Zoom toward cursor |
+| Middle-click drag | Pan |
+| Right-click drag | Pan |
+
+Status bar shows: `Tool │ Zoom % │ Image W×H │ Cursor X,Y`.
 
 ---
 
 ## Background daemon
 
-```bash
+```powershell
+# Start with default hotkey (Ctrl+Shift+S)
 screensaver
-# Press Ctrl+Shift+S to take a screenshot
-# Press Ctrl+C to quit
-```
 
----
-
-## Custom hotkey
-
-```bash
+# Use a custom hotkey
 screensaver --hotkey "ctrl+shift+p"
 ```
 
+Press the hotkey to capture the full screen and open the editor.  
+Right-click the tray icon for the context menu:
+- **Take Screenshot** — full-screen capture → editor
+- **Select Region** — overlay selection → editor
+- **Recent Screenshots ▶** — last 5 captures; click to open
+- **Open Last Screenshot** — opens the most recently saved file
+- **Quit** — exit the daemon
+
 ---
 
-## Version
+## Capture history
 
-```bash
-screensaver --version
+Every screenshot saved to disk is recorded in `%APPDATA%\screensaver\history.json` (max 200 entries).
+
+```powershell
+# List the 20 most recent screenshots (default)
+screensaver --history
+
+# List the 50 most recent
+screensaver --history --history-n 50
+
+# Clear all history
+screensaver --history-clear
 ```
+
+Output format:
+```
+#     Captured             Size      Path
+--------------------------------------------------------------------------------
+1     2026-05-03 14:22:33  1.2MB     C:\Users\You\Pictures\Screenshots\screenshot_20260503_142233.png
+2     2026-05-03 13:10:01  845.3KB   C:\Users\You\Pictures\Screenshots\screenshot_20260503_131001.png
+```
+
+---
+
+## Autostart (Windows)
+
+```powershell
+# Register to start automatically on Windows login
+screensaver --install
+
+# Remove from autostart
+screensaver --uninstall
+```
+
+This writes/removes an entry at `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`.  
+The `install.ps1` script also prompts to register autostart during initial setup.
 
 ---
 
@@ -116,7 +190,7 @@ quality: 90                   # JPEG quality 1–100 (ignored for PNG)
 
 ### Config subcommand
 
-```bash
+```powershell
 # Print current effective config (file + defaults merged) as YAML
 screensaver config show
 
@@ -128,4 +202,12 @@ screensaver config init --force
 
 # Print the config file path
 screensaver config path
+```
+
+---
+
+## Version
+
+```powershell
+screensaver --version
 ```
