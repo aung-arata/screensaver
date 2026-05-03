@@ -11,6 +11,8 @@
 //	screensaver --once --save-dir /path  # auto-save to directory with timestamped filename
 //	screensaver --select --save-dir /path  # select region and auto-save to directory
 //	screensaver --format jpeg --quality 85 --once  # save as JPEG with custom quality
+//	screensaver --install          # register for Windows autostart (runs daemon on login)
+//	screensaver --uninstall        # remove from Windows autostart
 //	screensaver config show        # print current effective config as YAML
 //	screensaver config init        # write default config to config file
 //	screensaver config path        # print the config file path
@@ -23,12 +25,15 @@ import (
 	"os"
 	"sync"
 
+	"github.com/aung-arata/screensaver/internal/autostart"
 	"github.com/aung-arata/screensaver/internal/capture"
 	"github.com/aung-arata/screensaver/internal/clipboard"
 	"github.com/aung-arata/screensaver/internal/config"
+	"github.com/aung-arata/screensaver/internal/console"
 	"github.com/aung-arata/screensaver/internal/editor"
 	"github.com/aung-arata/screensaver/internal/hotkey"
 	"github.com/aung-arata/screensaver/internal/overlay"
+	"github.com/aung-arata/screensaver/internal/singleinstance"
 	"github.com/aung-arata/screensaver/internal/tray"
 	"github.com/aung-arata/screensaver/internal/utils"
 )
@@ -78,7 +83,28 @@ func main() {
 	format     := flag.String("format", "", "Output format: png or jpeg (default from config, fallback \"png\")")
 	quality    := flag.Int("quality", 0, "JPEG quality 1–100 (default from config, fallback 90; ignored for PNG)")
 	configPath := flag.String("config", "", "Path to config file (overrides default location)")
+	install    := flag.Bool("install", false, "Register screensaver for Windows autostart and exit")
+	uninstall  := flag.Bool("uninstall", false, "Remove screensaver from Windows autostart and exit")
 	flag.Parse()
+
+	// Handle --install / --uninstall before loading config (they don't need it).
+	if *install {
+		if err := autostart.Install(); err != nil {
+			fmt.Fprintf(os.Stderr, "install failed: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Println("Screensaver registered for autostart. It will start automatically on next login.")
+		fmt.Println("To start it now, run: screensaver")
+		os.Exit(0)
+	}
+	if *uninstall {
+		if err := autostart.Uninstall(); err != nil {
+			fmt.Fprintf(os.Stderr, "uninstall failed: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Println("Screensaver removed from autostart.")
+		os.Exit(0)
+	}
 
 	// Load file-based config (or defaults if no file).
 	var fileCfg config.Config
@@ -267,6 +293,15 @@ func runSelect(outputPath string, openEditor bool, cfg config.Config) {
 // annotation editor with a full-screen capture.  Choosing "Select Region"
 // shows the overlay selection first.
 func runDaemon(combo string) {
+	// Single-instance guard: exit gracefully if another daemon is already running.
+	if !singleinstance.Acquire() {
+		showAlreadyRunningMsg()
+		os.Exit(0)
+	}
+
+	// Detach from the console window so no black terminal appears on the taskbar.
+	console.Detach()
+
 	quit := make(chan struct{})
 	var once sync.Once
 	closeQuit := func() { once.Do(func() { close(quit) }) }
