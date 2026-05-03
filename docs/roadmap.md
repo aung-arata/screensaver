@@ -12,12 +12,12 @@
 
 ## 🗓 Planned (Windows)
 
-- **Upload / share integration** — Imgur or S3 upload, returns shareable URL to clipboard *(requires Config — now done)*
-- **Capture history** — local JSON index, `--history` flag, `--open last` *(requires Config — now done)*
+- **Capture history** — local JSON index, `--history` flag, recent captures submenu in tray *(requires Config — done)*
+- **Scrolling / long-page capture** — stitch multiple captures of a scrollable region *(elevated priority — high local-use value)*
 - **Output format expansion** — WebP support, short GIF/screen recording
-- **Scrolling / long-page capture** — stitch multiple captures of a scrollable region
 - **Post-capture plugin hooks** — `--after-capture "cmd"` for external workflow integration
 - **Structured logging / debug mode** — `--debug` flag using `log/slog`
+- **Upload / share integration** — Imgur or S3 upload, returns shareable URL to clipboard *(low priority — local-use tool)*
 
 ---
 
@@ -50,6 +50,9 @@
 - **Single-instance guard** — named Windows Mutex (`Global\ScreensaverDaemonMutex`) prevents duplicate daemon; shows MessageBox and exits if already running
 - **Console detach in daemon mode** — `FreeConsole()` called when entering daemon mode so no black console window appears on the taskbar
 - **Windows autostart** — `--install` / `--uninstall` flags write/remove `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` registry entry; `install.ps1` prompts for autostart registration
+- **Editor zoom/pan** — mouse-wheel zoom (0.1×–32×, zoom-toward-cursor), middle/right-click drag pan, `clampPan()`
+- **Editor keyboard shortcuts** — `P/R/A/T` tool switch, `Ctrl+0` fit, `Ctrl+1` 1:1, `+/-` step zoom
+- **Editor status bar** — 22px strip: `Tool │ Zoom │ Image │ Cursor`; selective `InvalidateRect` on mouse move
 
 ---
 
