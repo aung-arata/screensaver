@@ -19,6 +19,11 @@ var mutexHandle windows.Handle
 // already running.
 // On success the mutex handle is kept alive as a package-level variable for
 // the lifetime of the process; the caller does not need to manage it.
+//
+// Note: windows.CreateMutex follows Win32 semantics — when the named mutex
+// already exists it returns a valid handle *and* sets err to
+// ERROR_ALREADY_EXISTS.  Checking err == windows.ERROR_ALREADY_EXISTS is the
+// correct cross-instance detection pattern with this API.
 func Acquire() bool {
 	name, _ := windows.UTF16PtrFromString(mutexName)
 	h, err := windows.CreateMutex(nil, false, name)

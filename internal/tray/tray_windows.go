@@ -130,7 +130,7 @@ var (
 	trayProcDefWindowProcW   = trayUser32.NewProc("DefWindowProcW")
 	trayProcPostQuitMessage  = trayUser32.NewProc("PostQuitMessage")
 	trayProcLoadIconW              = trayUser32.NewProc("LoadIconW")
-	trayProcCreateIconFromResEx    = trayUser32.NewProc("CreateIconFromResourceEx")
+	trayProcCreateIconFromResourceEx = trayUser32.NewProc("CreateIconFromResourceEx")
 	trayProcCreatePopupMenu  = trayUser32.NewProc("CreatePopupMenu")
 	trayProcAppendMenuW      = trayUser32.NewProc("AppendMenuW")
 	trayProcTrackPopupMenu   = trayUser32.NewProc("TrackPopupMenu")
@@ -212,7 +212,7 @@ func runPlatform(cfg Config) error {
 
 	// Load the application icon from embedded ICO data.
 	// CreateIconFromResourceEx interprets the raw ICO bytes and returns an HICON.
-	hIcon, _, _ := trayProcCreateIconFromResEx.Call(
+	hIcon, _, _ := trayProcCreateIconFromResourceEx.Call(
 		uintptr(unsafe.Pointer(&appicon.Data[0])),
 		uintptr(len(appicon.Data)),
 		1,    // fIcon = TRUE (icon, not cursor)
