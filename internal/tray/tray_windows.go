@@ -8,6 +8,8 @@ import (
 	"unsafe"
 
 	"golang.org/x/sys/windows"
+
+	"github.com/aung-arata/screensaver/internal/appicon"
 )
 
 // ---------------------------------------------------------------------------
@@ -127,7 +129,8 @@ var (
 	trayProcDispatchMessageW = trayUser32.NewProc("DispatchMessageW")
 	trayProcDefWindowProcW   = trayUser32.NewProc("DefWindowProcW")
 	trayProcPostQuitMessage  = trayUser32.NewProc("PostQuitMessage")
-	trayProcLoadIconW        = trayUser32.NewProc("LoadIconW")
+	trayProcLoadIconW              = trayUser32.NewProc("LoadIconW")
+	trayProcCreateIconFromResEx    = trayUser32.NewProc("CreateIconFromResourceEx")
 	trayProcCreatePopupMenu  = trayUser32.NewProc("CreatePopupMenu")
 	trayProcAppendMenuW      = trayUser32.NewProc("AppendMenuW")
 	trayProcTrackPopupMenu   = trayUser32.NewProc("TrackPopupMenu")
@@ -207,8 +210,20 @@ func runPlatform(cfg Config) error {
 	trayState.hwnd = hwnd
 	trayProcShowWindow.Call(hwnd, traySwHide)
 
-	// Load the application icon.
-	hIcon, _, _ := trayProcLoadIconW.Call(0, idiApplication)
+	// Load the application icon from embedded ICO data.
+	// CreateIconFromResourceEx interprets the raw ICO bytes and returns an HICON.
+	hIcon, _, _ := trayProcCreateIconFromResEx.Call(
+		uintptr(unsafe.Pointer(&appicon.Data[0])),
+		uintptr(len(appicon.Data)),
+		1,    // fIcon = TRUE (icon, not cursor)
+		0x00030000, // dwVer = 0x00030000 (Windows 3.x+ icon format)
+		0, 0, // cxDesired, cyDesired = 0 means use actual size
+		0,    // flags = 0
+	)
+	if hIcon == 0 {
+		// Fall back to the default application icon if custom icon fails to load.
+		hIcon, _, _ = trayProcLoadIconW.Call(0, idiApplication)
+	}
 
 	// Build NOTIFYICONDATA and add the tray icon.
 	nid := &trayState.nid

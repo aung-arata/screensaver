@@ -46,6 +46,10 @@
 - **Native save-location picker dialog** (Windows) — `GetSaveFileNameW` via `comdlg32.dll`
 - **"Open Last Screenshot" from tray** (Windows) — `ShellExecuteW` opens last saved file in default viewer
 - **Config file support** — `%APPDATA%\screensaver\config.yaml` on Windows (`~/.screensaver/config.yaml` fallback); hotkey, save path, format, quality; `--format`, `--quality`, `--config` flags; `config show/init/path` subcommand
+- **Custom tray icon** — embedded 16×16 ICO loaded via `CreateIconFromResourceEx`; also set on editor window via `WM_SETICON`
+- **Single-instance guard** — named Windows Mutex (`Global\ScreensaverDaemonMutex`) prevents duplicate daemon; shows MessageBox and exits if already running
+- **Console detach in daemon mode** — `FreeConsole()` called when entering daemon mode so no black console window appears on the taskbar
+- **Windows autostart** — `--install` / `--uninstall` flags write/remove `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` registry entry; `install.ps1` prompts for autostart registration
 
 ---
 

@@ -14,6 +14,7 @@ import (
 
 	"golang.org/x/sys/windows"
 
+	"github.com/aung-arata/screensaver/internal/appicon"
 	"github.com/aung-arata/screensaver/internal/savedialog"
 )
 
@@ -45,6 +46,11 @@ const (
 	edWmCommand     = 0x0111
 	edWmGetText     = 0x000D
 	edWmGetTextLen  = 0x000E
+	edWmSetIcon     = 0x0080
+
+	// WM_SETICON wParam values
+	edIconSmall = 0
+	edIconBig   = 1
 
 	// Virtual keys
 	edVkEscape  = 0x1B
@@ -235,6 +241,7 @@ var (
 	edProcSetFocus          = edUser32.NewProc("SetFocus")
 	edProcGetCursorPosEd    = edUser32.NewProc("GetCursorPos")
 	edProcMessageBoxW       = edUser32.NewProc("MessageBoxW")
+	edProcCreateIconFromResEx = edUser32.NewProc("CreateIconFromResourceEx")
 	edProcGetModuleHandleW  = edKernel32.NewProc("GetModuleHandleW")
 	edProcSetBkModeGDI      = edGdi32.NewProc("SetBkMode")
 	edProcSetTextColorGDI   = edGdi32.NewProc("SetTextColor")
@@ -394,6 +401,20 @@ func (e *Editor) runPlatform() error {
 		return fmt.Errorf("editor: CreateWindowExW: %v", cwErr)
 	}
 	edState.hwnd = hwnd
+
+	// Set the application icon on both the small (title bar) and large (Alt+Tab) slots.
+	hIcon, _, _ := edProcCreateIconFromResEx.Call(
+		uintptr(unsafe.Pointer(&appicon.Data[0])),
+		uintptr(len(appicon.Data)),
+		1,          // fIcon = TRUE
+		0x00030000, // dwVer
+		0, 0,       // desired size 0 = use actual
+		0,
+	)
+	if hIcon != 0 {
+		edProcSendMessageW.Call(hwnd, edWmSetIcon, edIconSmall, hIcon)
+		edProcSendMessageW.Call(hwnd, edWmSetIcon, edIconBig, hIcon)
+	}
 
 	edProcShowWindow.Call(hwnd, edSwShow)
 	edProcUpdateWindow.Call(hwnd)

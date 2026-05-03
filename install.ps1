@@ -75,3 +75,12 @@ if (-not $alreadyPresent) {
 
 Write-Host ""
 Write-Host "Done. You can now run:  screensaver --help"
+
+# ---------------------------------------------------------------------------
+# 5. Optionally register for Windows autostart
+# ---------------------------------------------------------------------------
+Write-Host ""
+$ans = Read-Host "Register screensaver to start automatically on Windows login? [y/N]"
+if ($ans -ieq 'y') {
+    & $dest --install
+}
