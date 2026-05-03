@@ -8,10 +8,11 @@ package tray
 // Config holds system tray configuration.
 type Config struct {
 	Tooltip    string
-	OnCapture  func() // called when "Take Screenshot" is selected
-	OnSelect   func() // called when "Select Region" is selected
-	OnOpenLast func() // called when "Open Last Screenshot" is selected
-	OnQuit     func() // called when "Quit" is selected
+	OnCapture  func()        // called when "Take Screenshot" is selected
+	OnSelect   func()        // called when "Select Region" is selected
+	OnOpenLast func()        // called when "Open Last Screenshot" is selected
+	OnRecent   func(string)  // called with the path when a recent screenshot is selected
+	OnQuit     func()        // called when "Quit" is selected
 }
 
 // DefaultConfig returns sensible defaults.

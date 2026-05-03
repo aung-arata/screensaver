@@ -13,6 +13,9 @@
 //	screensaver --format jpeg --quality 85 --once  # save as JPEG with custom quality
 //	screensaver --install          # register for Windows autostart (runs daemon on login)
 //	screensaver --uninstall        # remove from Windows autostart
+//	screensaver --history          # list recent screenshot history and exit
+//	screensaver --history-n 10     # show 10 most recent entries (use with --history)
+//	screensaver --history-clear    # clear all screenshot history and exit
 //	screensaver config show        # print current effective config as YAML
 //	screensaver config init        # write default config to config file
 //	screensaver config path        # print the config file path
@@ -23,6 +26,7 @@ import (
 	"fmt"
 	"image"
 	"os"
+	"strings"
 	"sync"
 
 	"github.com/aung-arata/screensaver/internal/autostart"
@@ -31,6 +35,7 @@ import (
 	"github.com/aung-arata/screensaver/internal/config"
 	"github.com/aung-arata/screensaver/internal/console"
 	"github.com/aung-arata/screensaver/internal/editor"
+	"github.com/aung-arata/screensaver/internal/history"
 	"github.com/aung-arata/screensaver/internal/hotkey"
 	"github.com/aung-arata/screensaver/internal/overlay"
 	"github.com/aung-arata/screensaver/internal/singleinstance"
@@ -85,6 +90,9 @@ func main() {
 	configPath := flag.String("config", "", "Path to config file (overrides default location)")
 	install    := flag.Bool("install", false, "Register screensaver for Windows autostart and exit")
 	uninstall  := flag.Bool("uninstall", false, "Remove screensaver from Windows autostart and exit")
+	historyFlag  := flag.Bool("history", false, "List recent screenshot history and exit")
+	historyN     := flag.Int("history-n", 20, "Number of recent history entries to show (use with --history)")
+	historyClear := flag.Bool("history-clear", false, "Clear all screenshot history and exit")
 	flag.Parse()
 
 	// Handle --install / --uninstall before loading config (they don't need it).
@@ -104,6 +112,22 @@ func main() {
 		}
 		fmt.Println("Screensaver removed from autostart.")
 		os.Exit(0)
+	}
+
+	// Handle --history-clear before loading config.
+	if *historyClear {
+		if err := history.Clear(); err != nil {
+			fmt.Fprintf(os.Stderr, "history clear: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Println("Screenshot history cleared.")
+		os.Exit(0)
+	}
+
+	// Handle --history before loading config.
+	if *historyFlag {
+		runHistory(*historyN)
+		return
 	}
 
 	// Load file-based config (or defaults if no file).
@@ -149,14 +173,18 @@ func main() {
 		return
 	}
 
-	runDaemon(cfg.Hotkey)
+	runDaemon(cfg)
 }
 
 // openEditorAndExit opens the annotation editor for img.
 // On error it writes to stderr and exits with status 1.
-func openEditorAndExit(img image.Image) {
+// format is recorded in the history entry when the editor's OnSave fires.
+func openEditorAndExit(img image.Image, format string) {
 	e := editor.New(img)
-	e.OnSave = func(p string) { setLastSavedPath(p) }
+	e.OnSave = func(p string) {
+		setLastSavedPath(p)
+		go history.Add(p, format)
+	}
 	if err := e.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "error running editor: %v\n", err)
 		os.Exit(1)
@@ -176,7 +204,7 @@ func runOnce(outputPath string, openEditor bool, cfg config.Config) {
 	}
 
 	if openEditor {
-		openEditorAndExit(img)
+		openEditorAndExit(img, cfg.Format)
 		return
 	}
 
@@ -186,6 +214,7 @@ func runOnce(outputPath string, openEditor bool, cfg config.Config) {
 			os.Exit(1)
 		}
 		setLastSavedPath(outputPath)
+		go history.Add(outputPath, cfg.Format)
 		fmt.Printf("Screenshot saved to %s\n", outputPath)
 		return
 	}
@@ -201,6 +230,7 @@ func runOnce(outputPath string, openEditor bool, cfg config.Config) {
 			os.Exit(1)
 		}
 		setLastSavedPath(path)
+		go history.Add(path, cfg.Format)
 		fmt.Printf("Screenshot saved to %s\n", path)
 		return
 	}
@@ -250,7 +280,7 @@ func runSelect(outputPath string, openEditor bool, cfg config.Config) {
 	}
 
 	if openEditor {
-		openEditorAndExit(img)
+		openEditorAndExit(img, cfg.Format)
 		return
 	}
 
@@ -260,6 +290,7 @@ func runSelect(outputPath string, openEditor bool, cfg config.Config) {
 			os.Exit(1)
 		}
 		setLastSavedPath(outputPath)
+		go history.Add(outputPath, cfg.Format)
 		fmt.Printf("Screenshot saved to %s\n", outputPath)
 		return
 	}
@@ -275,6 +306,7 @@ func runSelect(outputPath string, openEditor bool, cfg config.Config) {
 			os.Exit(1)
 		}
 		setLastSavedPath(path)
+		go history.Add(path, cfg.Format)
 		fmt.Printf("Screenshot saved to %s\n", path)
 		return
 	}
@@ -292,7 +324,7 @@ func runSelect(outputPath string, openEditor bool, cfg config.Config) {
 // Pressing the hotkey or choosing "Take Screenshot" from the tray opens the
 // annotation editor with a full-screen capture.  Choosing "Select Region"
 // shows the overlay selection first.
-func runDaemon(combo string) {
+func runDaemon(cfg config.Config) {
 	// Single-instance guard: exit gracefully if another daemon is already running.
 	if !singleinstance.Acquire() {
 		showAlreadyRunningMsg()
@@ -307,7 +339,7 @@ func runDaemon(combo string) {
 	closeQuit := func() { once.Do(func() { close(quit) }) }
 
 	// Start the hotkey listener in a background goroutine.
-	hl := hotkey.NewListener(combo, func() { go captureAndEdit() })
+	hl := hotkey.NewListener(cfg.Hotkey, func() { go captureAndEdit(cfg.Format) })
 	go func() {
 		if err := hl.Start(); err != nil {
 			fmt.Fprintf(os.Stderr, "[hotkey] %v\n", err)
@@ -315,15 +347,16 @@ func runDaemon(combo string) {
 	}()
 
 	// Run the system tray (blocks until Quit is selected).
-	cfg := tray.Config{
-		Tooltip:    fmt.Sprintf("Screensaver – press %s to capture", combo),
-		OnCapture:  func() { go captureAndEdit() },
-		OnSelect:   func() { go selectAndEdit() },
+	trayCfg := tray.Config{
+		Tooltip:    fmt.Sprintf("Screensaver – press %s to capture", cfg.Hotkey),
+		OnCapture:  func() { go captureAndEdit(cfg.Format) },
+		OnSelect:   func() { go selectAndEdit(cfg.Format) },
 		OnOpenLast: func() { go openLastScreenshot(getLastSavedPath()) },
+		OnRecent:   func(path string) { go openLastScreenshot(path) },
 		OnQuit:     closeQuit,
 	}
 	go func() {
-		if err := tray.Run(cfg); err != nil {
+		if err := tray.Run(trayCfg); err != nil {
 			fmt.Fprintf(os.Stderr, "tray: %v\n", err)
 		}
 		closeQuit()
@@ -334,15 +367,20 @@ func runDaemon(combo string) {
 }
 
 // captureAndEdit takes a full-screen screenshot and opens the annotation
-// editor.  Errors are printed to stderr; the process is not terminated.
-func captureAndEdit() {
+// editor.  format is the configured output format (e.g. "png" or "jpeg")
+// and is recorded in the history entry when the editor saves.
+// Errors are printed to stderr; the process is not terminated.
+func captureAndEdit(format string) {
 	img, err := capture.FullScreen(0)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "capture: %v\n", err)
 		return
 	}
 	e := editor.New(img)
-	e.OnSave = func(p string) { setLastSavedPath(p) }
+	e.OnSave = func(p string) {
+		setLastSavedPath(p)
+		go history.Add(p, format)
+	}
 	if err := e.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "editor: %v\n", err)
 	}
@@ -350,7 +388,9 @@ func captureAndEdit() {
 
 // selectAndEdit shows the region-selection overlay and, if the user draws a
 // rectangle, captures that region and opens the annotation editor.
-func selectAndEdit() {
+// format is the configured output format and is recorded in the history entry
+// when the editor saves.
+func selectAndEdit(format string) {
 	result, err := overlay.Show(0)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "overlay: %v\n", err)
@@ -371,10 +411,47 @@ func selectAndEdit() {
 		return
 	}
 	e := editor.New(img)
-	e.OnSave = func(p string) { setLastSavedPath(p) }
+	e.OnSave = func(p string) {
+		setLastSavedPath(p)
+		go history.Add(p, format)
+	}
 	if err := e.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "editor: %v\n", err)
 	}
+}
+
+// runHistory prints the n most recent history entries to stdout.
+func runHistory(n int) {
+	entries, err := history.Recent(n)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "history: %v\n", err)
+		os.Exit(1)
+	}
+	if len(entries) == 0 {
+		fmt.Println("No screenshots in history.")
+		return
+	}
+	fmt.Printf("%-4s  %-19s  %-8s  %s\n", "#", "Captured", "Size", "Path")
+	fmt.Println(strings.Repeat("-", 80))
+	for i, e := range entries {
+		fmt.Printf("%-4d  %-19s  %-8s  %s\n",
+			i+1,
+			e.Timestamp.Local().Format("2006-01-02 15:04:05"),
+			formatBytes(e.SizeBytes),
+			e.Path,
+		)
+	}
+}
+
+// formatBytes formats a byte count as a human-readable string.
+func formatBytes(b int64) string {
+	if b < 1024 {
+		return fmt.Sprintf("%dB", b)
+	}
+	if b < 1024*1024 {
+		return fmt.Sprintf("%.1fKB", float64(b)/1024)
+	}
+	return fmt.Sprintf("%.1fMB", float64(b)/1024/1024)
 }
 
 // runConfigCmd handles the "config" subcommand.

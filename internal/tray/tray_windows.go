@@ -4,12 +4,14 @@ package tray
 
 import (
 	"fmt"
+	"path/filepath"
 	"runtime"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
 
 	"github.com/aung-arata/screensaver/internal/appicon"
+	"github.com/aung-arata/screensaver/internal/history"
 )
 
 // ---------------------------------------------------------------------------
@@ -56,12 +58,20 @@ const (
 	mfString    = 0x00000000
 	mfSeparator = 0x00000800
 	mfGrayed    = 0x00000001
+	mfPopup     = 0x00000010
 
 	// Menu item IDs
 	idTrayCapture  = 1001
 	idTraySelect   = 1002
 	idTrayOpenLast = 1003
 	idTrayQuit     = 1004
+
+	// Recent screenshot submenu IDs (5 slots)
+	idTrayRecent0 = 2001
+	idTrayRecent1 = 2002
+	idTrayRecent2 = 2003
+	idTrayRecent3 = 2004
+	idTrayRecent4 = 2005
 
 	// ShowWindow
 	traySwHide = 0
@@ -150,6 +160,11 @@ var trayState struct {
 	cfg  Config
 	nid  notifyIconData
 }
+
+// trayRecentPaths stores the file paths of the up to 5 recent screenshots
+// shown in the "Recent Screenshots" submenu. Populated in showTrayMenu and
+// consumed in trayWndProc.
+var trayRecentPaths [5]string
 
 // Tray window class
 type trayWndClassExW struct {
@@ -297,6 +312,11 @@ func trayWndProc(hwnd, msg, wParam, lParam uintptr) uintptr {
 			if trayState.cfg.OnQuit != nil {
 				trayState.cfg.OnQuit()
 			}
+		case idTrayRecent0, idTrayRecent1, idTrayRecent2, idTrayRecent3, idTrayRecent4:
+			idx := id - idTrayRecent0
+			if idx >= 0 && idx < 5 && trayRecentPaths[idx] != "" && trayState.cfg.OnRecent != nil {
+				go trayState.cfg.OnRecent(trayRecentPaths[idx])
+			}
 		}
 		return 0
 
@@ -320,11 +340,34 @@ func showTrayMenu(hwnd uintptr) {
 	captureText, _ := windows.UTF16PtrFromString("Take Screenshot")
 	selectText, _ := windows.UTF16PtrFromString("Select Region")
 	openLastText, _ := windows.UTF16PtrFromString("Open Last Screenshot")
+	recentText, _ := windows.UTF16PtrFromString("Recent Screenshots \u25ba")
 	quitText, _ := windows.UTF16PtrFromString("Quit")
 
 	trayProcAppendMenuW.Call(hMenu, mfString, idTrayCapture, uintptr(unsafe.Pointer(captureText)))
 	trayProcAppendMenuW.Call(hMenu, mfString, idTraySelect, uintptr(unsafe.Pointer(selectText)))
 	trayProcAppendMenuW.Call(hMenu, mfString, idTrayOpenLast, uintptr(unsafe.Pointer(openLastText)))
+
+	// Build the "Recent Screenshots" submenu from the last 5 history entries.
+	hSubMenu, _, _ := trayProcCreatePopupMenu.Call()
+	if hSubMenu != 0 {
+		// Clear the paths array so stale entries are not re-used.
+		trayRecentPaths = [5]string{}
+
+		entries, err := history.Recent(5)
+		if err != nil || len(entries) == 0 {
+			noItemText, _ := windows.UTF16PtrFromString("No screenshots yet")
+			trayProcAppendMenuW.Call(hSubMenu, mfString|mfGrayed, 0, uintptr(unsafe.Pointer(noItemText)))
+		} else {
+			for i, e := range entries {
+				trayRecentPaths[i] = e.Path
+				label, _ := windows.UTF16PtrFromString(filepath.Base(e.Path))
+				trayProcAppendMenuW.Call(hSubMenu, mfString, uintptr(idTrayRecent0+i), uintptr(unsafe.Pointer(label)))
+			}
+		}
+		// Attach submenu to main menu. When MF_POPUP is set, uIDNewItem is the HMENU.
+		trayProcAppendMenuW.Call(hMenu, mfPopup, hSubMenu, uintptr(unsafe.Pointer(recentText)))
+	}
+
 	trayProcAppendMenuW.Call(hMenu, mfSeparator, 0, 0)
 	trayProcAppendMenuW.Call(hMenu, mfString, idTrayQuit, uintptr(unsafe.Pointer(quitText)))
 
