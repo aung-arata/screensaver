@@ -43,6 +43,11 @@ const (
 	edWmLButtonDown = 0x0201
 	edWmLButtonUp   = 0x0202
 	edWmMouseMove   = 0x0200
+	edWmRButtonDown = 0x0204
+	edWmRButtonUp   = 0x0205
+	edWmMButtonDown = 0x0207
+	edWmMButtonUp   = 0x0209
+	edWmMouseWheel  = 0x020A
 	edWmCommand     = 0x0111
 	edWmGetText     = 0x000D
 	edWmGetTextLen  = 0x000E
@@ -59,15 +64,23 @@ const (
 	edVkZ       = 0x5A
 	edVkC       = 0x43
 	edVkS       = 0x53
+	edVkP       = 0x50
+	edVkR       = 0x52
+	edVkA       = 0x41
+	edVkT       = 0x54
+	edVk0       = 0x30
+	edVk1       = 0x31
+	edVkPlus    = 0xBB // VK_OEM_PLUS
+	edVkMinus   = 0xBD // VK_OEM_MINUS
 
 	// GDI
-	edBiRGB       = 0
+	edBiRGB        = 0
 	edDibRGBColors = 0
-	edSrcCopy     = 0x00CC0020
-	edPsSolid     = 0
-	edNullBrush   = 5
-	edTransparent = 1
-	edSwShow      = 5
+	edSrcCopy      = 0x00CC0020
+	edPsSolid      = 0
+	edNullBrush    = 5
+	edTransparent  = 1
+	edSwShow       = 5
 
 	// DrawText flags
 	edDtCenter     = 0x00000001
@@ -102,12 +115,17 @@ const (
 	idBtnSave  = 108
 
 	// Layout
-	toolbarHeight int32 = 40
-	btnW          int32 = 60
-	btnH          int32 = 28
-	btnMarginTop  int32 = 6
-	minWinW       int32 = 640
-	minWinH       int32 = 480
+	toolbarHeight   int32 = 40
+	statusBarHeight int32 = 22
+	btnW            int32 = 60
+	btnH            int32 = 28
+	btnMarginTop    int32 = 6
+	minWinW         int32 = 640
+	minWinH         int32 = 480
+
+	// Zoom limits
+	edZoomMin = 0.1
+	edZoomMax = 32.0
 
 	// ChooseColor flags
 	edCcRGBInit = 0x00000001
@@ -288,8 +306,21 @@ var edState struct {
 	// Canvas layout (recalculated on WM_SIZE / WM_PAINT)
 	imgX, imgY int32   // top-left of displayed image in client coords
 	imgW, imgH int32   // displayed image size (after scaling)
-	scale      float64 // image→canvas scale factor
+	scale      float64 // effective image→canvas scale factor (fitScale * zoomFactor)
+	fitScale   float64 // base fit-to-window scale (≤ 1.0)
 	natW, natH int32   // natural image size (pixels)
+
+	// Zoom and pan
+	zoomFactor float64 // 1.0 = fit-to-window, >1 = zoomed in
+	panOffX    float64 // pan offset in image pixels (horizontal)
+	panOffY    float64 // pan offset in image pixels (vertical)
+
+	// Pan gesture state
+	panning      bool
+	panStartX    int32   // client coords where pan started
+	panStartY    int32
+	panStartOffX float64 // panOffX at pan start
+	panStartOffY float64 // panOffY at pan start
 
 	// Render cache
 	cachedBGRA []byte // bottom-up BGRA buffer for StretchDIBits
@@ -300,6 +331,11 @@ var edState struct {
 	bbBmp uintptr // compatible bitmap selected into bbDC
 	bbW   int32   // width of current backbuffer (0 → not allocated)
 	bbH   int32   // height of current backbuffer
+
+	// Status bar cursor tracking
+	cursorImgX   int32
+	cursorImgY   int32
+	cursorOnImage bool
 
 	// Guard against multiple simultaneous editors
 	running int32 // atomic: 0=idle, 1=running
@@ -347,6 +383,12 @@ func (e *Editor) runPlatform() error {
 	edState.frameDirty = true
 	edState.dragging = false
 	edState.penStroke = nil
+	edState.zoomFactor = 1.0
+	edState.panOffX = 0
+	edState.panOffY = 0
+	edState.fitScale = 0
+	edState.panning = false
+	edState.cursorOnImage = false
 
 	// Load cursors (IDC_CROSS = 32515, IDC_ARROW = 32512).
 	edState.crossCursor, _, _ = edProcLoadCursorW.Call(0, 32515)
@@ -445,14 +487,16 @@ func editorWndProc(hwnd, msg, wParam, lParam uintptr) uintptr {
 		return 1 // prevent flicker
 
 	case edWmSetCursor:
-		// Use crosshair in the canvas, arrow in the toolbar.
+		// Use crosshair in the canvas, arrow in the toolbar and status bar.
 		if edLoWord(lParam) == edHtClient {
 			// Convert cursor screen position to client coordinates so we can
 			// check whether it is inside the toolbar strip.
 			var pt edPoint
 			edProcGetCursorPosEd.Call(uintptr(unsafe.Pointer(&pt)))
 			edProcScreenToClient.Call(hwnd, uintptr(unsafe.Pointer(&pt)))
-			if pt.Y < toolbarHeight {
+			var cr edRect
+			edProcGetClientRect.Call(hwnd, uintptr(unsafe.Pointer(&cr)))
+			if pt.Y < toolbarHeight || pt.Y >= cr.Bottom-statusBarHeight {
 				edProcSetCursor.Call(edState.arrowCursor)
 			} else {
 				edProcSetCursor.Call(edState.crossCursor)
@@ -490,8 +534,28 @@ func editorWndProc(hwnd, msg, wParam, lParam uintptr) uintptr {
 			doCopy()
 		case ctrl && wParam == edVkS:
 			doSave()
+		case ctrl && wParam == edVk0:
+			doResetZoom(hwnd)
+		case ctrl && wParam == edVk1:
+			doZoom1to1(hwnd)
 		case wParam == edVkEscape:
 			edProcDestroyWindow.Call(hwnd)
+		case !ctrl && wParam == edVkP:
+			edState.activeTool = ToolPen
+			updateTitle(hwnd)
+		case !ctrl && wParam == edVkR:
+			edState.activeTool = ToolRect
+			updateTitle(hwnd)
+		case !ctrl && wParam == edVkA:
+			edState.activeTool = ToolArrow
+			updateTitle(hwnd)
+		case !ctrl && wParam == edVkT:
+			edState.activeTool = ToolText
+			updateTitle(hwnd)
+		case wParam == edVkPlus:
+			doZoomStep(hwnd, 1)
+		case wParam == edVkMinus:
+			doZoomStep(hwnd, -1)
 		}
 		return 0
 
@@ -501,6 +565,12 @@ func editorWndProc(hwnd, msg, wParam, lParam uintptr) uintptr {
 			if id := toolbarHitTest(x, y); id != 0 {
 				handleToolbarCommand(hwnd, id)
 			}
+			return 0
+		}
+		// Ignore clicks in the status bar.
+		var cr edRect
+		edProcGetClientRect.Call(hwnd, uintptr(unsafe.Pointer(&cr)))
+		if y >= cr.Bottom-statusBarHeight {
 			return 0
 		}
 		ix, iy := canvasToImage(x, y)
@@ -535,10 +605,48 @@ func editorWndProc(hwnd, msg, wParam, lParam uintptr) uintptr {
 		return 0
 
 	case edWmMouseMove:
+		x, y := int32(edLoWord(lParam)), int32(edHiWord(lParam))
+
+		// Update cursor position for status bar.
+		var cr edRect
+		edProcGetClientRect.Call(hwnd, uintptr(unsafe.Pointer(&cr)))
+		if y > toolbarHeight && y < cr.Bottom-statusBarHeight {
+			ix, iy := canvasToImage(x, y)
+			if ix >= 0 && ix < float64(edState.natW) && iy >= 0 && iy < float64(edState.natH) {
+				newImgX, newImgY := int32(ix), int32(iy)
+				if !edState.cursorOnImage || edState.cursorImgX != newImgX || edState.cursorImgY != newImgY {
+					edState.cursorImgX = newImgX
+					edState.cursorImgY = newImgY
+					edState.cursorOnImage = true
+					edInvalidateStatusBar(hwnd, cr.Right, cr.Bottom)
+				}
+			} else if edState.cursorOnImage {
+				edState.cursorOnImage = false
+				edInvalidateStatusBar(hwnd, cr.Right, cr.Bottom)
+			}
+		} else if edState.cursorOnImage {
+			edState.cursorOnImage = false
+			edInvalidateStatusBar(hwnd, cr.Right, cr.Bottom)
+		}
+
+		// Handle pan gesture.
+		if edState.panning {
+			deltaX := x - edState.panStartX
+			deltaY := y - edState.panStartY
+			if edState.scale > 0 {
+				edState.panOffX = edState.panStartOffX - float64(deltaX)/edState.scale
+				edState.panOffY = edState.panStartOffY - float64(deltaY)/edState.scale
+			}
+			canvasH := cr.Bottom - toolbarHeight - statusBarHeight
+			clampPan(cr.Right, canvasH)
+			computeLayout(cr.Right, cr.Bottom)
+			edProcInvalidateRect.Call(hwnd, 0, 0)
+			return 0
+		}
+
 		if !edState.dragging {
 			return 0
 		}
-		x, y := int32(edLoWord(lParam)), int32(edHiWord(lParam))
 		ix, iy := canvasToImage(x, y)
 		ix, iy = clampToImage(ix, iy)
 		edState.dragCX, edState.dragCY = ix, iy
@@ -563,6 +671,83 @@ func editorWndProc(hwnd, msg, wParam, lParam uintptr) uintptr {
 		edState.penStroke = nil
 		edState.frameDirty = true
 		edProcInvalidateRect.Call(hwnd, 0, 0)
+		return 0
+
+	case edWmMButtonDown:
+		// Middle-click starts a pan gesture.
+		edState.panning = true
+		edState.panStartX = int32(edLoWord(lParam))
+		edState.panStartY = int32(edHiWord(lParam))
+		edState.panStartOffX = edState.panOffX
+		edState.panStartOffY = edState.panOffY
+		edProcSetCapture.Call(hwnd)
+		return 0
+
+	case edWmMButtonUp:
+		if edState.panning {
+			edState.panning = false
+			edProcReleaseCapture.Call()
+		}
+		return 0
+
+	case edWmRButtonDown:
+		// Right-click also starts a pan gesture (alternative to middle-click).
+		edState.panning = true
+		edState.panStartX = int32(edLoWord(lParam))
+		edState.panStartY = int32(edHiWord(lParam))
+		edState.panStartOffX = edState.panOffX
+		edState.panStartOffY = edState.panOffY
+		edProcSetCapture.Call(hwnd)
+		return 0
+
+	case edWmRButtonUp:
+		if edState.panning {
+			edState.panning = false
+			edProcReleaseCapture.Call()
+		}
+		return 0
+
+	case edWmMouseWheel:
+		// Get cursor position in client coordinates.
+		var screenPt edPoint
+		edProcGetCursorPosEd.Call(uintptr(unsafe.Pointer(&screenPt)))
+		edProcScreenToClient.Call(hwnd, uintptr(unsafe.Pointer(&screenPt)))
+		cursorX, cursorY := screenPt.X, screenPt.Y
+
+		// Get canvas dimensions.
+		var cr edRect
+		edProcGetClientRect.Call(hwnd, uintptr(unsafe.Pointer(&cr)))
+		clientW, clientH := cr.Right, cr.Bottom
+		canvasH := clientH - toolbarHeight - statusBarHeight
+
+		// Record image-space point under cursor before zoom.
+		ix, iy := 0.0, 0.0
+		if edState.scale > 0 {
+			ix = (float64(cursorX) - float64(edState.imgX)) / edState.scale
+			iy = (float64(cursorY) - float64(edState.imgY)) / edState.scale
+		}
+
+		// Compute new zoom factor.
+		delta := float64(edHiWord(wParam))
+		factor := math.Pow(1.15, delta/120.0)
+		edState.zoomFactor = math.Max(edZoomMin, math.Min(edZoomMax, edState.zoomFactor*factor))
+
+		// Adjust pan so the image point under the cursor stays under the cursor.
+		if edState.fitScale > 0 {
+			newScale := edState.fitScale * edState.zoomFactor
+			newImgW := int32(float64(edState.natW) * newScale)
+			newImgH := int32(float64(edState.natH) * newScale)
+			newBaseX := clientW/2 - newImgW/2
+			newBaseY := toolbarHeight + canvasH/2 - newImgH/2
+			if newScale > 0 {
+				edState.panOffX = (float64(cursorX)-float64(newBaseX))/newScale - ix
+				edState.panOffY = (float64(cursorY)-float64(newBaseY))/newScale - iy
+			}
+		}
+		clampPan(clientW, canvasH)
+		computeLayout(clientW, clientH)
+		edProcInvalidateRect.Call(hwnd, 0, 0)
+		updateTitle(hwnd)
 		return 0
 
 	case edWmDestroy:
@@ -702,10 +887,11 @@ func paintEditor(hwnd, hdc uintptr) {
 func edPaintOnDC(dc uintptr, clientW, clientH int32) {
 	// ---------- canvas ----------
 
-	// Fill canvas background (black).
+	// Fill canvas background (black), stopping above the status bar.
 	canvasTop := toolbarHeight
+	canvasBottom := clientH - statusBarHeight
 	brushBlack, _, _ := edProcCreateSolidBrush.Call(0x00000000)
-	canvasR := edRect{0, canvasTop, clientW, clientH}
+	canvasR := edRect{0, canvasTop, clientW, canvasBottom}
 	edProcFillRect.Call(dc, uintptr(unsafe.Pointer(&canvasR)), brushBlack)
 	edProcDeleteObject.Call(brushBlack)
 
@@ -740,6 +926,35 @@ func edPaintOnDC(dc uintptr, clientW, clientH int32) {
 
 	// ---------- toolbar ----------
 	drawToolbar(dc, clientW)
+
+	// ---------- status bar ----------
+	{
+		sbTop := clientH - statusBarHeight
+		// Background.
+		bgBrush, _, _ := edProcCreateSolidBrush.Call(0x00F0F0F0)
+		sbRect := edRect{0, sbTop, clientW, clientH}
+		edProcFillRect.Call(dc, uintptr(unsafe.Pointer(&sbRect)), bgBrush)
+		edProcDeleteObject.Call(bgBrush)
+		// Top border line.
+		borderPen, _, _ := edProcCreatePen.Call(edPsSolid, 1, 0x00B4B4B4) // RGB(180,180,180) in BGR
+		oldPen, _, _ := edProcSelectObject.Call(dc, borderPen)
+		edProcMoveToEx.Call(dc, 0, uintptr(sbTop), 0)
+		edProcLineTo.Call(dc, uintptr(clientW), uintptr(sbTop))
+		edProcSelectObject.Call(dc, oldPen)
+		edProcDeleteObject.Call(borderPen)
+		// Status text.
+		statusText := buildStatusText()
+		statusPtr, _ := windows.UTF16PtrFromString(statusText)
+		edProcSetBkModeGDI.Call(dc, edTransparent)
+		edProcSetTextColorGDI.Call(dc, 0x00333333)
+		sbTextRect := edRect{4, sbTop, clientW - 4, clientH}
+		edProcDrawTextW.Call(
+			dc,
+			uintptr(unsafe.Pointer(statusPtr)), ^uintptr(0),
+			uintptr(unsafe.Pointer(&sbTextRect)),
+			edDtVCenter|edDtSingleLine,
+		)
+	}
 }
 
 // drawDragPreview draws the in-progress annotation using GDI.
@@ -905,21 +1120,26 @@ func toolbarHitTest(x, y int32) int {
 // computeLayout recalculates how the image fits inside the canvas.
 func computeLayout(clientW, clientH int32) {
 	canvasW := clientW
-	canvasH := clientH - toolbarHeight
+	canvasH := clientH - toolbarHeight - statusBarHeight
 	if canvasW <= 0 || canvasH <= 0 || edState.natW == 0 || edState.natH == 0 {
 		return
 	}
 	scaleX := float64(canvasW) / float64(edState.natW)
 	scaleY := float64(canvasH) / float64(edState.natH)
-	s := math.Min(scaleX, scaleY)
-	if s > 1 {
-		s = 1
+	fitScale := math.Min(scaleX, scaleY)
+	if fitScale > 1 {
+		fitScale = 1 // never upscale for fit
 	}
-	edState.scale = s
-	edState.imgW = int32(float64(edState.natW) * s)
-	edState.imgH = int32(float64(edState.natH) * s)
-	edState.imgX = (canvasW - edState.imgW) / 2
-	edState.imgY = toolbarHeight + (canvasH-edState.imgH)/2
+	edState.fitScale = fitScale
+	effectiveScale := fitScale * edState.zoomFactor
+	edState.scale = effectiveScale
+	edState.imgW = int32(float64(edState.natW) * effectiveScale)
+	edState.imgH = int32(float64(edState.natH) * effectiveScale)
+	// Center the image within the canvas, then apply pan offset.
+	baseX := canvasW/2 - edState.imgW/2
+	baseY := toolbarHeight + canvasH/2 - edState.imgH/2
+	edState.imgX = baseX + int32(edState.panOffX*effectiveScale)
+	edState.imgY = baseY + int32(edState.panOffY*effectiveScale)
 }
 
 // canvasToImage maps client-area coordinates to image coordinates.
@@ -944,6 +1164,41 @@ func clampToImage(ix, iy float64) (float64, float64) {
 	ix = math.Max(0, math.Min(float64(edState.natW-1), ix))
 	iy = math.Max(0, math.Min(float64(edState.natH-1), iy))
 	return ix, iy
+}
+
+// clampPan restricts panOffX/panOffY so that at least half the canvas
+// dimension always shows the image.
+func clampPan(canvasW, canvasH int32) {
+	scale := edState.fitScale * edState.zoomFactor
+	if scale == 0 {
+		return
+	}
+	imgWCanvas := float64(edState.natW) * scale
+	imgHCanvas := float64(edState.natH) * scale
+	cW := float64(canvasW)
+	cH := float64(canvasH)
+	minVisible := cW / 2
+	// Horizontal bounds (image pixels).
+	panMinX := (-imgWCanvas/2 + minVisible - cW/2) / scale
+	panMaxX := (cW/2 - minVisible + imgWCanvas/2) / scale
+	if panMinX > panMaxX {
+		panMinX, panMaxX = panMaxX, panMinX
+	}
+	edState.panOffX = math.Max(panMinX, math.Min(panMaxX, edState.panOffX))
+	// Vertical bounds (image pixels).
+	minVisibleY := cH / 2
+	panMinY := (-imgHCanvas/2 + minVisibleY - cH/2) / scale
+	panMaxY := (cH/2 - minVisibleY + imgHCanvas/2) / scale
+	if panMinY > panMaxY {
+		panMinY, panMaxY = panMaxY, panMinY
+	}
+	edState.panOffY = math.Max(panMinY, math.Min(panMaxY, edState.panOffY))
+}
+
+// edInvalidateStatusBar invalidates only the status bar strip to reduce repaints.
+func edInvalidateStatusBar(hwnd uintptr, clientW, clientH int32) {
+	sbRect := edRect{0, clientH - statusBarHeight, clientW, clientH}
+	edProcInvalidateRect.Call(hwnd, uintptr(unsafe.Pointer(&sbRect)), 0)
 }
 
 // ---------------------------------------------------------------------------
@@ -1023,12 +1278,77 @@ func doSave() {
 	edShowMessage(edState.hwnd, fmt.Sprintf("Saved to %s", path))
 }
 
-// updateTitle sets the window title to include the active tool name.
+// updateTitle sets the window title to include the active tool name and zoom level.
 func updateTitle(hwnd uintptr) {
-	title := fmt.Sprintf("Screensaver – Editor [%s]  Ctrl+Z Undo | Ctrl+C Copy | Ctrl+S Save | Esc Close", edState.activeTool)
+	zoom := 100
+	if edState.fitScale > 0 {
+		zoom = int(math.Round(edState.zoomFactor * edState.fitScale * 100))
+	}
+	title := fmt.Sprintf(
+		"Screensaver – Editor [%s] %d%%  │  Ctrl+Z Undo  Ctrl+C Copy  Ctrl+S Save  Esc Close",
+		edState.activeTool, zoom,
+	)
 	titlePtr, _ := windows.UTF16PtrFromString(title)
 	edProcSetWindowTextW.Call(hwnd, uintptr(unsafe.Pointer(titlePtr)))
 	edProcInvalidateRect.Call(hwnd, 0, 0)
+}
+
+// buildStatusText constructs the status bar string from current editor state.
+func buildStatusText() string {
+	zoom := 100
+	if edState.fitScale > 0 {
+		zoom = int(math.Round(edState.zoomFactor * edState.fitScale * 100))
+	}
+	imgSize := fmt.Sprintf("%d × %d", edState.natW, edState.natH)
+	var cursor string
+	if edState.cursorOnImage {
+		cursor = fmt.Sprintf("(%d, %d)", edState.cursorImgX, edState.cursorImgY)
+	} else {
+		cursor = "–"
+	}
+	return fmt.Sprintf("  Tool: %s  │  Zoom: %d%%  │  Image: %s  │  Cursor: %s",
+		edState.activeTool, zoom, imgSize, cursor)
+}
+
+// doZoomStep zooms in (direction > 0) or out (direction < 0) by one step.
+func doZoomStep(hwnd uintptr, direction int) {
+	factor := math.Pow(1.15, float64(direction))
+	edState.zoomFactor = math.Max(edZoomMin, math.Min(edZoomMax, edState.zoomFactor*factor))
+	var cr edRect
+	edProcGetClientRect.Call(hwnd, uintptr(unsafe.Pointer(&cr)))
+	canvasH := cr.Bottom - toolbarHeight - statusBarHeight
+	clampPan(cr.Right, canvasH)
+	computeLayout(cr.Right, cr.Bottom)
+	edProcInvalidateRect.Call(hwnd, 0, 0)
+	updateTitle(hwnd)
+}
+
+// doResetZoom resets zoom to fit-to-window and clears pan.
+func doResetZoom(hwnd uintptr) {
+	edState.zoomFactor = 1.0
+	edState.panOffX = 0
+	edState.panOffY = 0
+	var cr edRect
+	edProcGetClientRect.Call(hwnd, uintptr(unsafe.Pointer(&cr)))
+	computeLayout(cr.Right, cr.Bottom)
+	edProcInvalidateRect.Call(hwnd, 0, 0)
+	updateTitle(hwnd)
+}
+
+// doZoom1to1 sets zoom to 1:1 (one image pixel = one screen pixel).
+func doZoom1to1(hwnd uintptr) {
+	if edState.fitScale > 0 {
+		edState.zoomFactor = 1.0 / edState.fitScale
+		edState.panOffX = 0
+		edState.panOffY = 0
+		var cr edRect
+		edProcGetClientRect.Call(hwnd, uintptr(unsafe.Pointer(&cr)))
+		canvasH := cr.Bottom - toolbarHeight - statusBarHeight
+		clampPan(cr.Right, canvasH)
+		computeLayout(cr.Right, cr.Bottom)
+		edProcInvalidateRect.Call(hwnd, 0, 0)
+		updateTitle(hwnd)
+	}
 }
 
 // ---------------------------------------------------------------------------
