@@ -359,9 +359,6 @@ func showTrayMenu(hwnd uintptr) {
 			trayProcAppendMenuW.Call(hSubMenu, mfString|mfGrayed, 0, uintptr(unsafe.Pointer(noItemText)))
 		} else {
 			for i, e := range entries {
-				if i >= 5 {
-					break
-				}
 				trayRecentPaths[i] = e.Path
 				label, _ := windows.UTF16PtrFromString(filepath.Base(e.Path))
 				trayProcAppendMenuW.Call(hSubMenu, mfString, uintptr(idTrayRecent0+i), uintptr(unsafe.Pointer(label)))

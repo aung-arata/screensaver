@@ -173,7 +173,7 @@ func main() {
 		return
 	}
 
-	runDaemon(cfg.Hotkey)
+	runDaemon(cfg)
 }
 
 // openEditorAndExit opens the annotation editor for img.
@@ -324,7 +324,7 @@ func runSelect(outputPath string, openEditor bool, cfg config.Config) {
 // Pressing the hotkey or choosing "Take Screenshot" from the tray opens the
 // annotation editor with a full-screen capture.  Choosing "Select Region"
 // shows the overlay selection first.
-func runDaemon(combo string) {
+func runDaemon(cfg config.Config) {
 	// Single-instance guard: exit gracefully if another daemon is already running.
 	if !singleinstance.Acquire() {
 		showAlreadyRunningMsg()
@@ -339,7 +339,7 @@ func runDaemon(combo string) {
 	closeQuit := func() { once.Do(func() { close(quit) }) }
 
 	// Start the hotkey listener in a background goroutine.
-	hl := hotkey.NewListener(combo, func() { go captureAndEdit() })
+	hl := hotkey.NewListener(cfg.Hotkey, func() { go captureAndEdit(cfg.Format) })
 	go func() {
 		if err := hl.Start(); err != nil {
 			fmt.Fprintf(os.Stderr, "[hotkey] %v\n", err)
@@ -347,16 +347,16 @@ func runDaemon(combo string) {
 	}()
 
 	// Run the system tray (blocks until Quit is selected).
-	cfg := tray.Config{
-		Tooltip:    fmt.Sprintf("Screensaver – press %s to capture", combo),
-		OnCapture:  func() { go captureAndEdit() },
-		OnSelect:   func() { go selectAndEdit() },
+	trayCfg := tray.Config{
+		Tooltip:    fmt.Sprintf("Screensaver – press %s to capture", cfg.Hotkey),
+		OnCapture:  func() { go captureAndEdit(cfg.Format) },
+		OnSelect:   func() { go selectAndEdit(cfg.Format) },
 		OnOpenLast: func() { go openLastScreenshot(getLastSavedPath()) },
 		OnRecent:   func(path string) { go openLastScreenshot(path) },
 		OnQuit:     closeQuit,
 	}
 	go func() {
-		if err := tray.Run(cfg); err != nil {
+		if err := tray.Run(trayCfg); err != nil {
 			fmt.Fprintf(os.Stderr, "tray: %v\n", err)
 		}
 		closeQuit()
@@ -367,8 +367,10 @@ func runDaemon(combo string) {
 }
 
 // captureAndEdit takes a full-screen screenshot and opens the annotation
-// editor.  Errors are printed to stderr; the process is not terminated.
-func captureAndEdit() {
+// editor.  format is the configured output format (e.g. "png" or "jpeg")
+// and is recorded in the history entry when the editor saves.
+// Errors are printed to stderr; the process is not terminated.
+func captureAndEdit(format string) {
 	img, err := capture.FullScreen(0)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "capture: %v\n", err)
@@ -377,7 +379,7 @@ func captureAndEdit() {
 	e := editor.New(img)
 	e.OnSave = func(p string) {
 		setLastSavedPath(p)
-		go history.Add(p, "png")
+		go history.Add(p, format)
 	}
 	if err := e.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "editor: %v\n", err)
@@ -386,7 +388,9 @@ func captureAndEdit() {
 
 // selectAndEdit shows the region-selection overlay and, if the user draws a
 // rectangle, captures that region and opens the annotation editor.
-func selectAndEdit() {
+// format is the configured output format and is recorded in the history entry
+// when the editor saves.
+func selectAndEdit(format string) {
 	result, err := overlay.Show(0)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "overlay: %v\n", err)
@@ -409,7 +413,7 @@ func selectAndEdit() {
 	e := editor.New(img)
 	e.OnSave = func(p string) {
 		setLastSavedPath(p)
-		go history.Add(p, "png")
+		go history.Add(p, format)
 	}
 	if err := e.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "editor: %v\n", err)
