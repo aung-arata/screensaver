@@ -12,7 +12,24 @@ sudo apt install xclip   # Debian/Ubuntu
 
 ---
 
-## Option 1 – `go install` (recommended)
+## Option 1 – Windows installer (`.exe`)
+
+The easiest way to install on Windows is the pre-built `screensaver-setup.exe`
+installer generated with [Inno Setup](https://jrsoftware.org/isdl.php).
+
+1. Download `screensaver-setup.exe` from the
+   [Releases](https://github.com/aung-arata/screensaver/releases) page.
+2. Run it and follow the wizard (installs to `Program Files\Screensaver`).
+3. A Start Menu shortcut is created automatically; an optional Desktop shortcut
+   is offered during setup.
+4. To uninstall, use **Apps & Features / Add or Remove Programs**.
+
+> **Note:** The installer requires administrator privileges to write to
+> `Program Files`.
+
+---
+
+## Option 2 – `go install` (recommended for developers)
 
 ```bash
 go install github.com/aung-arata/screensaver/cmd/screensaver@latest
@@ -40,7 +57,7 @@ The binary is placed in `$GOPATH/bin` (usually `~/go/bin` on Linux/macOS or
 
 ---
 
-## Option 2 – Windows install script
+## Option 3 – Windows install script
 
 Clone the repo and run the provided PowerShell helper, which builds the binary,
 copies it to `%GOPATH%\bin`, and updates your `PATH` automatically:
@@ -59,7 +76,7 @@ screensaver --version
 
 ---
 
-## Option 3 – Build locally (all platforms)
+## Option 4 – Build locally (all platforms)
 
 ```bash
 git clone https://github.com/aung-arata/screensaver.git
