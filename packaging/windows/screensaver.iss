@@ -7,7 +7,7 @@
 
 #define MyAppName "Screensaver"
 #ifndef MyAppVersion
-  #define MyAppVersion "0.2.0"
+  #define MyAppVersion "0.3.0"
 #endif
 #define MyAppPublisher "Aung Arata"
 #define MyAppURL "https://github.com/aung-arata/screensaver"
