@@ -44,7 +44,7 @@ import (
 )
 
 // Version is the application version, set at build time via ldflags.
-var Version = "0.2.0"
+var Version = "0.3.0"
 
 // lastSavedPath holds the path of the most recently saved screenshot.
 // It is updated on every successful save (from the editor or CLI flags).

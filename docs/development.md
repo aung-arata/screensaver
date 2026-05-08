@@ -37,6 +37,8 @@ The Windows `.exe` installer is created with
 
 ### Compile the installer manually
 
+`screensaver.exe` must already exist in the repository root before running this command (see Prerequisites above).
+
 ```powershell
 # From the repo root
 ISCC.exe packaging\windows\screensaver.iss
