@@ -42,10 +42,17 @@ $iscc = $null
 $iscc = Get-Command 'ISCC.exe' -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source
 
 if (-not $iscc) {
-    # Fall back to the default Inno Setup 6 install location
-    $defaultPath = Join-Path $env:ProgramFiles 'Inno Setup 6\ISCC.exe'
-    if (Test-Path $defaultPath) {
-        $iscc = $defaultPath
+    # Fall back to the default Inno Setup 6 install locations.
+    # On 64-bit Windows, Inno Setup typically installs to Program Files (x86).
+    $candidatePaths = @(
+        (Join-Path $env:ProgramFiles          'Inno Setup 6\ISCC.exe'),
+        (Join-Path ${env:ProgramFiles(x86)}   'Inno Setup 6\ISCC.exe')
+    )
+    foreach ($candidate in $candidatePaths) {
+        if (Test-Path $candidate) {
+            $iscc = $candidate
+            break
+        }
     }
 }
 
@@ -53,7 +60,9 @@ if (-not $iscc) {
     Write-Error @"
 ISCC.exe not found.
 Install Inno Setup 6 from https://jrsoftware.org/isdl.php and ensure ISCC.exe is on your PATH,
-or install it to the default location: $($env:ProgramFiles)\Inno Setup 6\
+or install it to one of the default locations:
+  $($env:ProgramFiles)\Inno Setup 6\
+  ${env:ProgramFiles(x86)}\Inno Setup 6\
 "@
     exit 1
 }

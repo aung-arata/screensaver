@@ -31,6 +31,9 @@ SolidCompression=yes
 WizardStyle=modern
 ; Run as admin to install to Program Files
 PrivilegesRequired=admin
+; On 64-bit Windows, install to the native 64-bit Program Files folder
+; (without this, {autopf} resolves to Program Files (x86) on x64 systems)
+ArchitecturesInstallIn64BitMode=x64
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"

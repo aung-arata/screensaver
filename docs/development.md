@@ -53,8 +53,9 @@ in one step:
 .\packaging\windows\build-installer.ps1
 ```
 
-The script automatically locates `ISCC.exe` on `PATH` or at the Inno Setup
-default install path (`%ProgramFiles%\Inno Setup 6\ISCC.exe`).
+The script automatically locates `ISCC.exe` on `PATH` or at the standard Inno
+Setup install paths (`%ProgramFiles(x86)%\Inno Setup 6\ISCC.exe` on most 64-bit
+systems, or `%ProgramFiles%\Inno Setup 6\ISCC.exe`).
 
 ### Releasing
 
