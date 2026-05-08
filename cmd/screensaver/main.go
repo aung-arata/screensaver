@@ -176,6 +176,10 @@ func main() {
 		fmt.Fprintln(os.Stderr, "error: --scroll cannot be used with --once")
 		os.Exit(1)
 	}
+	if *scroll && *sel {
+		fmt.Fprintln(os.Stderr, "error: --scroll cannot be used with --select")
+		os.Exit(1)
+	}
 	if *scroll && runtime.GOOS != "windows" {
 		fmt.Fprintln(os.Stderr, "error: long-page capture is only supported on Windows right now")
 		os.Exit(1)

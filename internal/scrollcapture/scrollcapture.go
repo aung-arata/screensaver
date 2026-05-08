@@ -11,6 +11,19 @@ const (
 	defaultStepPx    = 900
 	defaultMaxFrames = 20
 	minNewContentPx  = 30
+	minOverlapHeight = 20
+	overlapEdgeGuard = 10
+	frameDiffStepX   = 8
+	frameDiffStepY   = 8
+	overlapStepX     = 6
+	overlapStepY     = 2
+
+	// nearIdenticalThreshold is the average absolute sampled RGB-channel
+	// difference (0..255 scale) below which two frames are treated as identical.
+	nearIdenticalThreshold = 2.0
+	// maxOverlapScore is the maximum average absolute sampled RGB-channel
+	// difference (0..255 scale) accepted for a valid overlap match.
+	maxOverlapScore = 20.0
 )
 
 // Config controls long-page auto-scroll capture behavior.
@@ -93,11 +106,11 @@ func cloneRGBA(src *image.RGBA) *image.RGBA {
 }
 
 func framesAreNearIdentical(a, b *image.RGBA) bool {
-	diff, ok := sampleAverageDiff(a, b, 8, 8, 0, a.Bounds().Dy(), 0)
+	diff, ok := sampleAverageDiff(a, b, frameDiffStepX, frameDiffStepY, 0, a.Bounds().Dy(), 0)
 	if !ok {
 		return false
 	}
-	return diff <= 2.0
+	return diff <= nearIdenticalThreshold
 }
 
 func findBestVerticalOverlap(prev, curr *image.RGBA) (int, bool) {
@@ -107,7 +120,7 @@ func findBestVerticalOverlap(prev, curr *image.RGBA) (int, bool) {
 		return 0, false
 	}
 	h := bp.Dy()
-	if h < 20 {
+	if h < minOverlapHeight {
 		return 0, false
 	}
 
@@ -118,7 +131,7 @@ func findBestVerticalOverlap(prev, curr *image.RGBA) (int, bool) {
 	if minOverlap < 10 {
 		minOverlap = 10
 	}
-	maxOverlap := h - 10
+	maxOverlap := h - overlapEdgeGuard
 	if maxOverlap <= minOverlap {
 		return 0, false
 	}
@@ -127,7 +140,7 @@ func findBestVerticalOverlap(prev, curr *image.RGBA) (int, bool) {
 	bestScore := 1e9
 	for overlap := minOverlap; overlap <= maxOverlap; overlap++ {
 		startPrev := h - overlap
-		score, ok := sampleAverageDiff(prev, curr, 6, 2, startPrev, h, 0)
+		score, ok := sampleAverageDiff(prev, curr, overlapStepX, overlapStepY, startPrev, h, 0)
 		if !ok {
 			continue
 		}
@@ -140,7 +153,7 @@ func findBestVerticalOverlap(prev, curr *image.RGBA) (int, bool) {
 	if bestOverlap == 0 {
 		return 0, false
 	}
-	if bestScore > 20.0 {
+	if bestScore > maxOverlapScore {
 		return 0, false
 	}
 	return bestOverlap, true

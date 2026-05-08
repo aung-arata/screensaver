@@ -101,8 +101,8 @@ func sendScrollAtRegionCenter(region image.Rectangle, step int) error {
 
 	centerX := region.Min.X + region.Dx()/2
 	centerY := region.Min.Y + region.Dy()/2
-	ok, _, err := procSetCursorPos.Call(uintptr(centerX), uintptr(centerY))
-	if ok == 0 {
+	ret, _, err := procSetCursorPos.Call(uintptr(centerX), uintptr(centerY))
+	if ret == 0 {
 		return fmt.Errorf("SetCursorPos failed: %v", err)
 	}
 
