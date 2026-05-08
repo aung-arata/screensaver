@@ -7,9 +7,11 @@
 //	screensaver --select           # interactive region selection (overlay, Windows only)
 //	screensaver --once --edit      # capture full screen and open annotation editor
 //	screensaver --select --edit    # select a region and open annotation editor (Windows only)
+//	screensaver --scroll --edit    # experimental long-page capture and open editor (Windows only)
 //	screensaver --hotkey "ctrl+shift+p"  # use a custom hotkey
 //	screensaver --once --save-dir /path  # auto-save to directory with timestamped filename
 //	screensaver --select --save-dir /path  # select region and auto-save to directory
+//	screensaver --scroll --save-dir /path  # long-page capture and auto-save to directory (Windows only)
 //	screensaver --format jpeg --quality 85 --once  # save as JPEG with custom quality
 //	screensaver --install          # register for Windows autostart (runs daemon on login)
 //	screensaver --uninstall        # remove from Windows autostart
@@ -26,6 +28,7 @@ import (
 	"fmt"
 	"image"
 	"os"
+	"runtime"
 	"strings"
 	"sync"
 
@@ -38,6 +41,7 @@ import (
 	"github.com/aung-arata/screensaver/internal/history"
 	"github.com/aung-arata/screensaver/internal/hotkey"
 	"github.com/aung-arata/screensaver/internal/overlay"
+	"github.com/aung-arata/screensaver/internal/scrollcapture"
 	"github.com/aung-arata/screensaver/internal/singleinstance"
 	"github.com/aung-arata/screensaver/internal/tray"
 	"github.com/aung-arata/screensaver/internal/utils"
@@ -73,25 +77,30 @@ func getLastSavedPath() string {
 // - config <sub>: config file management subcommand.
 // - --version: prints the build-time Version and exits.
 // - --select: shows an interactive fullscreen region selector and captures the chosen area.
+// - --scroll: experimental Windows-only long-page capture with auto-scroll and stitching.
 // - --once: captures a full-screen screenshot once.
 // - default: starts daemon mode which registers a global hotkey (configurable via --hotkey).
-// The --output flag, when provided with --once or --select, saves the captured image to the given path.
-// The --edit flag, when combined with --once or --select, opens the annotation editor after capture.
+// The --output flag, when provided with --once, --select, or --scroll, saves the captured image to the given path.
+// The --edit flag, when combined with --once, --select, or --scroll, opens the annotation editor after capture.
 func main() {
-	once       := flag.Bool("once", false, "Capture one screenshot and exit (no background daemon)")
-	sel        := flag.Bool("select", false, "Interactive region selection: dims the screen and lets you drag a rectangle")
+	once := flag.Bool("once", false, "Capture one screenshot and exit (no background daemon)")
+	sel := flag.Bool("select", false, "Interactive region selection: dims the screen and lets you drag a rectangle")
+	scroll := flag.Bool("scroll", false, "Experimental Windows-only long-page capture with auto-scroll and vertical stitching")
+	scrollDelay := flag.Int("scroll-delay", 250, "Delay in milliseconds between scroll/capture steps (use with --scroll)")
+	scrollStep := flag.Int("scroll-step", 900, "Scroll amount in pixels or equivalent wheel delta step (use with --scroll)")
+	scrollMax := flag.Int("scroll-max", 20, "Maximum number of frames to capture in long-page mode")
 	hotkeyFlag := flag.String("hotkey", "", "Global hotkey combination (e.g. 'ctrl+shift+s'); overrides config file; defaults to config value or 'ctrl+shift+s'")
-	output     := flag.String("output", "", "Save screenshot to this path (only with --once or --select)")
-	saveDir    := flag.String("save-dir", "", "Auto-save to this directory with a timestamped filename (only with --once or --select; --output takes precedence when both are set)")
-	edit       := flag.Bool("edit", false, "Open the annotation editor after capture (use with --once or --select)")
-	version    := flag.Bool("version", false, "Print version and exit")
-	format     := flag.String("format", "", "Output format: png or jpeg (default from config, fallback \"png\")")
-	quality    := flag.Int("quality", 0, "JPEG quality 1–100 (default from config, fallback 90; ignored for PNG)")
+	output := flag.String("output", "", "Save screenshot to this path (only with --once, --select, or --scroll)")
+	saveDir := flag.String("save-dir", "", "Auto-save to this directory with a timestamped filename (only with --once, --select, or --scroll; --output takes precedence when both are set)")
+	edit := flag.Bool("edit", false, "Open the annotation editor after capture (use with --once, --select, or --scroll)")
+	version := flag.Bool("version", false, "Print version and exit")
+	format := flag.String("format", "", "Output format: png or jpeg (default from config, fallback \"png\")")
+	quality := flag.Int("quality", 0, "JPEG quality 1–100 (default from config, fallback 90; ignored for PNG)")
 	configPath := flag.String("config", "", "Path to config file (overrides default location)")
-	install    := flag.Bool("install", false, "Register screensaver for Windows autostart and exit")
-	uninstall  := flag.Bool("uninstall", false, "Remove screensaver from Windows autostart and exit")
-	historyFlag  := flag.Bool("history", false, "List recent screenshot history and exit")
-	historyN     := flag.Int("history-n", 20, "Number of recent history entries to show (use with --history)")
+	install := flag.Bool("install", false, "Register screensaver for Windows autostart and exit")
+	uninstall := flag.Bool("uninstall", false, "Remove screensaver from Windows autostart and exit")
+	historyFlag := flag.Bool("history", false, "List recent screenshot history and exit")
+	historyN := flag.Int("history-n", 20, "Number of recent history entries to show (use with --history)")
 	historyClear := flag.Bool("history-clear", false, "Clear all screenshot history and exit")
 	flag.Parse()
 
@@ -161,6 +170,24 @@ func main() {
 	if *version {
 		fmt.Printf("screensaver %s\n", Version)
 		os.Exit(0)
+	}
+
+	if *scroll && *once {
+		fmt.Fprintln(os.Stderr, "error: --scroll cannot be used with --once")
+		os.Exit(1)
+	}
+	if *scroll && runtime.GOOS != "windows" {
+		fmt.Fprintln(os.Stderr, "error: long-page capture is only supported on Windows right now")
+		os.Exit(1)
+	}
+
+	if *scroll {
+		runScroll(*output, *edit, cfg, scrollcapture.Config{
+			DelayMs:   *scrollDelay,
+			StepPx:    *scrollStep,
+			MaxFrames: *scrollMax,
+		})
+		return
 	}
 
 	if *sel {
@@ -316,6 +343,70 @@ func runSelect(outputPath string, openEditor bool, cfg config.Config) {
 		os.Exit(1)
 	}
 	fmt.Println("Region screenshot copied to clipboard")
+}
+
+// runScroll displays the region-selection overlay, performs experimental
+// Windows-only long-page capture with auto-scroll + vertical stitching, and
+// then routes output to editor/save/save-dir/clipboard.
+func runScroll(outputPath string, openEditor bool, cfg config.Config, sc scrollcapture.Config) {
+	result, err := overlay.Show(0)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+
+	if result.Cancelled {
+		fmt.Println("Selection cancelled")
+		return
+	}
+	if result.Region.Dx() == 0 || result.Region.Dy() == 0 {
+		fmt.Println("No selection")
+		return
+	}
+
+	img, err := scrollcapture.Capture(result.Region, sc)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error capturing long-page: %v\n", err)
+		os.Exit(1)
+	}
+
+	if openEditor {
+		openEditorAndExit(img, cfg.Format)
+		return
+	}
+
+	if outputPath != "" {
+		if err := utils.SaveImage(img, outputPath, cfg.Quality); err != nil {
+			fmt.Fprintf(os.Stderr, "error saving image: %v\n", err)
+			os.Exit(1)
+		}
+		setLastSavedPath(outputPath)
+		go history.Add(outputPath, cfg.Format)
+		fmt.Printf("Screenshot saved to %s\n", outputPath)
+		return
+	}
+
+	if cfg.SaveDir != "" {
+		path, err := utils.GenerateFilename(cfg.SaveDir, cfg.Format)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error generating filename: %v\n", err)
+			os.Exit(1)
+		}
+		if err := utils.SaveImage(img, path, cfg.Quality); err != nil {
+			fmt.Fprintf(os.Stderr, "error saving image: %v\n", err)
+			os.Exit(1)
+		}
+		setLastSavedPath(path)
+		go history.Add(path, cfg.Format)
+		fmt.Printf("Screenshot saved to %s\n", path)
+		return
+	}
+
+	if err := clipboard.CopyImage(img); err != nil {
+		fmt.Fprintf(os.Stderr, "error copying to clipboard: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Println("Long-page screenshot copied to clipboard")
 }
 
 // runDaemon registers a global hotkey and a system tray icon then blocks

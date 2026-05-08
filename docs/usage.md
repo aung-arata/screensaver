@@ -7,8 +7,12 @@
 | *(none)* | daemon | Background daemon with hotkey + tray icon |
 | `--once` | one-shot | Capture full screen and exit |
 | `--select` | one-shot | Interactive region selection and exit |
-| `--edit` | modifier | Open annotation editor after capture (combine with `--once` or `--select`) |
-| `--output <path>` | modifier | Save to explicit file path (combine with `--once` or `--select`) |
+| `--scroll` | one-shot | **Experimental** Windows-only long-page capture with auto-scroll + vertical stitching |
+| `--scroll-delay <ms>` | modifier | Delay between scroll/capture steps in `--scroll` mode (default 250) |
+| `--scroll-step <n>` | modifier | Scroll amount/wheel delta used in `--scroll` mode (default 900) |
+| `--scroll-max <n>` | modifier | Maximum frames captured in `--scroll` mode (default 20) |
+| `--edit` | modifier | Open annotation editor after capture (combine with `--once`, `--select`, or `--scroll`) |
+| `--output <path>` | modifier | Save to explicit file path (combine with `--once`, `--select`, or `--scroll`) |
 | `--save-dir <dir>` | modifier | Auto-save to directory with timestamped filename |
 | `--hotkey <combo>` | daemon | Override hotkey (default: `ctrl+shift+s`) |
 | `--format <fmt>` | any | Output format: `png` or `jpeg` (default from config, fallback `png`) |
@@ -62,6 +66,29 @@ region you want to capture. Release to capture, or press **Escape** to cancel.
 
 > **Note:** `--select` requires Windows (Win32 APIs). On non-Windows platforms
 > the command returns a "not yet implemented" error.
+
+---
+
+## Experimental long-page capture (Windows only)
+
+`--scroll` is an **experimental** Windows-only mode that captures a selected
+region repeatedly while auto-scrolling downward, then stitches the frames into
+one long image.
+
+```powershell
+screensaver --scroll --edit
+screensaver --scroll --output page.png
+screensaver --scroll --save-dir C:\Screenshots --scroll-delay 300 --scroll-step 900 --scroll-max 15
+```
+
+Behavior:
+- `--scroll` uses region selection first (draw the scrollable area you want)
+- Stops when no meaningful new content is detected or `--scroll-max` is reached
+- Output follows normal one-shot flow: editor, explicit output path, auto-save
+  directory, or clipboard if no save path is provided
+
+> **Note:** On non-Windows platforms `--scroll` returns:
+> `long-page capture is only supported on Windows right now`
 
 ---
 
