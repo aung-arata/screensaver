@@ -157,15 +157,18 @@ func findBestVerticalOverlap(prev, curr *image.RGBA) (int, bool) {
 		return 0, false
 	}
 
-	refineStart := bestOverlap - overlapCoarseStep + 1
-	if refineStart < minOverlap {
-		refineStart = minOverlap
+	refineStart := minOverlap
+	if candidate := bestOverlap - overlapCoarseStep + 1; candidate > refineStart {
+		refineStart = candidate
 	}
-	refineEnd := bestOverlap + overlapCoarseStep - 1
-	if refineEnd > maxOverlap {
-		refineEnd = maxOverlap
+	refineEnd := maxOverlap
+	if candidate := bestOverlap + overlapCoarseStep - 1; candidate < refineEnd {
+		refineEnd = candidate
 	}
 	for overlap := refineStart; overlap <= refineEnd; overlap++ {
+		if (overlap-minOverlap)%overlapCoarseStep == 0 {
+			continue
+		}
 		startPrev := h - overlap
 		score, ok := sampleAverageDiff(prev, curr, overlapStepX, overlapStepY, startPrev, h, 0)
 		if !ok {

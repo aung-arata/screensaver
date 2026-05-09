@@ -78,6 +78,7 @@ one long image.
 ```powershell
 screensaver --scroll --edit
 screensaver --scroll --output page.png
+# Use a larger multiple of 120 for faster scrolling between captures.
 screensaver --scroll --save-dir C:\Screenshots --scroll-delay 300 --scroll-step 960 --scroll-max 15
 ```
 
