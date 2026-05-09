@@ -46,7 +46,7 @@ func capturePlatform(region image.Rectangle, cfg Config) (image.Image, error) {
 	parts := []*image.RGBA{cloneRGBA(prev)}
 	last := prev
 	for i := 1; i < cfg.MaxFrames; i++ {
-		if err := sendScrollAtRegionCenter(region, cfg.StepPx); err != nil {
+		if err := sendScrollAtRegionCenter(region, cfg.WheelStep); err != nil {
 			return nil, err
 		}
 		time.Sleep(time.Duration(cfg.DelayMs) * time.Millisecond)
@@ -93,7 +93,7 @@ func captureRegion(region image.Rectangle) (*image.RGBA, error) {
 
 func sendScrollAtRegionCenter(region image.Rectangle, step int) error {
 	if step == 0 {
-		step = defaultStepPx
+		step = defaultWheelStep
 	}
 	if step < 0 {
 		step = -step

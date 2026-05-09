@@ -9,7 +9,7 @@
 | `--select` | one-shot | Interactive region selection and exit |
 | `--scroll` | one-shot | **Experimental** Windows-only long-page capture with auto-scroll + vertical stitching |
 | `--scroll-delay <ms>` | modifier | Delay between scroll/capture steps in `--scroll` mode (default 250) |
-| `--scroll-step <n>` | modifier | Scroll amount/wheel delta used in `--scroll` mode (default 900) |
+| `--scroll-step <n>` | modifier | Mouse wheel delta step used in `--scroll` mode (default 120; usually multiples of 120) |
 | `--scroll-max <n>` | modifier | Maximum frames captured in `--scroll` mode (default 20) |
 | `--edit` | modifier | Open annotation editor after capture (combine with `--once`, `--select`, or `--scroll`) |
 | `--output <path>` | modifier | Save to explicit file path (combine with `--once`, `--select`, or `--scroll`) |
@@ -78,7 +78,7 @@ one long image.
 ```powershell
 screensaver --scroll --edit
 screensaver --scroll --output page.png
-screensaver --scroll --save-dir C:\Screenshots --scroll-delay 300 --scroll-step 900 --scroll-max 15
+screensaver --scroll --save-dir C:\Screenshots --scroll-delay 300 --scroll-step 960 --scroll-max 15
 ```
 
 Behavior:

@@ -7,16 +7,17 @@ import (
 )
 
 const (
-	defaultDelayMs   = 250
-	defaultStepPx    = 900
-	defaultMaxFrames = 20
-	minNewContentPx  = 30
-	minOverlapHeight = 20
-	overlapEdgeGuard = 10
-	frameDiffStepX   = 8
-	frameDiffStepY   = 8
-	overlapStepX     = 6
-	overlapStepY     = 2
+	defaultDelayMs    = 250
+	defaultWheelStep  = 120
+	defaultMaxFrames  = 20
+	minNewContentPx   = 30
+	minOverlapHeight  = 20
+	overlapEdgeGuard  = 10
+	frameDiffStepX    = 8
+	frameDiffStepY    = 8
+	overlapStepX      = 6
+	overlapStepY      = 2
+	overlapCoarseStep = 4
 
 	// nearIdenticalThreshold is the average absolute sampled RGB-channel
 	// difference (0..255 scale) below which two frames are treated as identical.
@@ -29,7 +30,7 @@ const (
 // Config controls long-page auto-scroll capture behavior.
 type Config struct {
 	DelayMs   int
-	StepPx    int
+	WheelStep int
 	MaxFrames int
 }
 
@@ -47,8 +48,8 @@ func normalizeConfig(cfg Config) Config {
 	if cfg.DelayMs <= 0 {
 		cfg.DelayMs = defaultDelayMs
 	}
-	if cfg.StepPx == 0 {
-		cfg.StepPx = defaultStepPx
+	if cfg.WheelStep == 0 {
+		cfg.WheelStep = defaultWheelStep
 	}
 	if cfg.MaxFrames <= 0 {
 		cfg.MaxFrames = defaultMaxFrames
@@ -131,14 +132,40 @@ func findBestVerticalOverlap(prev, curr *image.RGBA) (int, bool) {
 	if minOverlap < 10 {
 		minOverlap = 10
 	}
-	maxOverlap := h - overlapEdgeGuard
+	maxOverlap := h - minNewContentPx
+	if edgeLimited := h - overlapEdgeGuard; edgeLimited < maxOverlap {
+		maxOverlap = edgeLimited
+	}
 	if maxOverlap <= minOverlap {
 		return 0, false
 	}
 
 	bestOverlap := 0
 	bestScore := 1e9
-	for overlap := minOverlap; overlap <= maxOverlap; overlap++ {
+	for overlap := minOverlap; overlap <= maxOverlap; overlap += overlapCoarseStep {
+		startPrev := h - overlap
+		score, ok := sampleAverageDiff(prev, curr, overlapStepX, overlapStepY, startPrev, h, 0)
+		if !ok {
+			continue
+		}
+		if score < bestScore {
+			bestScore = score
+			bestOverlap = overlap
+		}
+	}
+	if bestOverlap == 0 {
+		return 0, false
+	}
+
+	refineStart := bestOverlap - overlapCoarseStep + 1
+	if refineStart < minOverlap {
+		refineStart = minOverlap
+	}
+	refineEnd := bestOverlap + overlapCoarseStep - 1
+	if refineEnd > maxOverlap {
+		refineEnd = maxOverlap
+	}
+	for overlap := refineStart; overlap <= refineEnd; overlap++ {
 		startPrev := h - overlap
 		score, ok := sampleAverageDiff(prev, curr, overlapStepX, overlapStepY, startPrev, h, 0)
 		if !ok {
@@ -150,9 +177,6 @@ func findBestVerticalOverlap(prev, curr *image.RGBA) (int, bool) {
 		}
 	}
 
-	if bestOverlap == 0 {
-		return 0, false
-	}
 	if bestScore > maxOverlapScore {
 		return 0, false
 	}

@@ -87,7 +87,7 @@ func main() {
 	sel := flag.Bool("select", false, "Interactive region selection: dims the screen and lets you drag a rectangle")
 	scroll := flag.Bool("scroll", false, "Experimental Windows-only long-page capture with auto-scroll and vertical stitching")
 	scrollDelay := flag.Int("scroll-delay", 250, "Delay in milliseconds between scroll/capture steps (use with --scroll)")
-	scrollStep := flag.Int("scroll-step", 900, "Scroll amount in pixels or equivalent wheel delta step (use with --scroll)")
+	scrollStep := flag.Int("scroll-step", 120, "Mouse wheel delta step for auto-scroll in --scroll mode (typical values are multiples of 120)")
 	scrollMax := flag.Int("scroll-max", 20, "Maximum number of frames to capture in long-page mode")
 	hotkeyFlag := flag.String("hotkey", "", "Global hotkey combination (e.g. 'ctrl+shift+s'); overrides config file; defaults to config value or 'ctrl+shift+s'")
 	output := flag.String("output", "", "Save screenshot to this path (only with --once, --select, or --scroll)")
@@ -188,7 +188,7 @@ func main() {
 	if *scroll {
 		runScroll(*output, *edit, cfg, scrollcapture.Config{
 			DelayMs:   *scrollDelay,
-			StepPx:    *scrollStep,
+			WheelStep: *scrollStep,
 			MaxFrames: *scrollMax,
 		})
 		return
