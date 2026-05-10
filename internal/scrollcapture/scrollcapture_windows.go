@@ -35,9 +35,37 @@ var (
 	user32           = windows.NewLazySystemDLL("user32.dll")
 	procSendInput    = user32.NewProc("SendInput")
 	procSetCursorPos = user32.NewProc("SetCursorPos")
+	procGetCursorPos = user32.NewProc("GetCursorPos")
 )
 
+type point struct {
+	X int32
+	Y int32
+}
+
+func getCursorPos() (point, error) {
+	var p point
+	ret, _, err := procGetCursorPos.Call(uintptr(unsafe.Pointer(&p)))
+	if ret == 0 {
+		return point{}, fmt.Errorf("GetCursorPos failed: %v", err)
+	}
+	return p, nil
+}
+
+func setCursorPos(p point) error {
+	ret, _, err := procSetCursorPos.Call(uintptr(p.X), uintptr(p.Y))
+	if ret == 0 {
+		return fmt.Errorf("SetCursorPos failed: %v", err)
+	}
+	return nil
+}
+
 func capturePlatform(region image.Rectangle, cfg Config) (image.Image, error) {
+	if orig, err := getCursorPos(); err == nil {
+		defer func() { _ = setCursorPos(orig) }()
+	}
+	// If getCursorPos fails, capture continues without cursor restoration.
+
 	prev, err := captureRegion(region)
 	if err != nil {
 		return nil, err
@@ -101,9 +129,8 @@ func sendScrollAtRegionCenter(region image.Rectangle, step int) error {
 
 	centerX := region.Min.X + region.Dx()/2
 	centerY := region.Min.Y + region.Dy()/2
-	ret, _, err := procSetCursorPos.Call(uintptr(centerX), uintptr(centerY))
-	if ret == 0 {
-		return fmt.Errorf("SetCursorPos failed: %v", err)
+	if err := setCursorPos(point{X: int32(centerX), Y: int32(centerY)}); err != nil {
+		return err
 	}
 
 	in := input{
