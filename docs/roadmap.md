@@ -12,7 +12,6 @@
 
 ## 🗓 Planned (Windows)
 
-- **Scrolling / long-page capture** — stitch multiple captures of a scrollable region *(elevated priority — high local-use value)*
 - **Output format expansion** — WebP support, short GIF/screen recording
 - **Post-capture plugin hooks** — `--after-capture "cmd"` for external workflow integration
 - **Structured logging / debug mode** — `--debug` flag using `log/slog`
@@ -53,6 +52,7 @@
 - **Editor keyboard shortcuts** — `P/R/A/T` tool switch, `Ctrl+0` fit, `Ctrl+1` 1:1, `+/-` step zoom
 - **Editor status bar** — 22px strip: `Tool │ Zoom │ Image │ Cursor`; selective `InvalidateRect` on mouse move
 - **Capture history** — `%APPDATA%\screensaver\history.json` (max 200 entries); `--history` / `--history-n` / `--history-clear` CLI flags; "Recent Screenshots" tray submenu (last 5)
+- **Scrolling / long-page capture (experimental, Windows-first)** — `--scroll` mode with selected region, auto-scroll, overlap-based vertical stitching, and stop-on-no-new-content
 
 ---
 
