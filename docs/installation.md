@@ -27,6 +27,34 @@ installer generated with [Inno Setup](https://jrsoftware.org/isdl.php).
 > **Note:** The installer requires administrator privileges to write to
 > `Program Files`.
 
+### Build this installer locally (Windows)
+
+To generate the same `.exe` installer from source:
+
+1. Install **Inno Setup 6** from <https://jrsoftware.org/isdl.php>.
+2. Installer assets:
+   - `packaging/windows/screensaver.iss`
+   - `packaging/windows/build-installer.ps1`
+3. Build `screensaver.exe` first:
+
+```powershell
+go build -o screensaver.exe ./cmd/screensaver
+```
+
+4. Build installer (choose one):
+
+```powershell
+# Manual
+ISCC.exe packaging\windows\screensaver.iss
+```
+
+```powershell
+# Helper script
+.\packaging\windows\build-installer.ps1
+```
+
+Both commands output `screensaver-setup.exe` in the repository root.
+
 ---
 
 ## Option 2 – `go install` (recommended for developers)

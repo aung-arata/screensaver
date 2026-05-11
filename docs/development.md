@@ -29,6 +29,11 @@ GOOS=windows GOARCH=amd64 go build -o screensaver.exe ./cmd/screensaver
 The Windows `.exe` installer is created with
 [Inno Setup 6](https://jrsoftware.org/isdl.php).
 
+### Installer assets
+
+- `packaging/windows/screensaver.iss`
+- `packaging/windows/build-installer.ps1`
+
 ### Prerequisites
 
 1. Build `screensaver.exe` first (see Cross-compilation above, or run
@@ -58,6 +63,8 @@ in one step:
 The script automatically locates `ISCC.exe` on `PATH` or at the standard Inno
 Setup install paths (`%ProgramFiles(x86)%\Inno Setup 6\ISCC.exe` on most 64-bit
 systems, or `%ProgramFiles%\Inno Setup 6\ISCC.exe`).
+
+Both manual and helper methods output `screensaver-setup.exe` in the repository root.
 
 ### Releasing
 
