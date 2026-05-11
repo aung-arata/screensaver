@@ -45,12 +45,41 @@ Built in **Go** — compiles to a single binary with no runtime dependencies.
 
 ---
 
+## Windows Installer
+
+A ready-to-use `.exe` installer for Windows is generated with
+[Inno Setup 6](https://jrsoftware.org/isdl.php).
+
+| File | Purpose |
+|---|---|
+| `packaging/windows/screensaver.iss` | Inno Setup script |
+| `packaging/windows/build-installer.ps1` | Helper — builds the binary **and** compiles the installer |
+
+**Quick build (PowerShell):**
+
+```powershell
+# One-step: builds screensaver.exe then produces screensaver-setup.exe
+.\packaging\windows\build-installer.ps1
+```
+
+Or compile manually after building `screensaver.exe`:
+
+```powershell
+ISCC.exe packaging\windows\screensaver.iss
+```
+
+Output: `screensaver-setup.exe` in the repository root.
+
+See [docs/development.md](./docs/development.md#building-the-windows-installer) for full details.
+
+---
+
 ## Documentation
 
 - [Installation](./docs/installation.md) — requirements and install options
 - [Usage](./docs/usage.md) — CLI flags and workflows
 - [Architecture](./docs/architecture.md) — directory structure and how it works
-- [Development](./docs/development.md) — running tests and cross-compilation
+- [Development](./docs/development.md) — running tests, cross-compilation, and building the installer
 - [Roadmap](./docs/roadmap.md) — what's in progress, planned, and deferred
 
 ---
