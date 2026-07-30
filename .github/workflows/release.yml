@@ -1,0 +1,61 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write   # needed to create GitHub Releases and upload assets
+
+jobs:
+  build-and-release:
+    name: Build installer & publish release
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      # Strip the leading "v" from the tag (v1.2.3 → 1.2.3) for Inno Setup
+      - name: Extract version from tag
+        id: version
+        shell: bash
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      # Build the Go binary with the tag version baked in via ldflags
+      - name: Build screensaver.exe
+        shell: bash
+        run: |
+          go build \
+            -ldflags="-X 'main.Version=${{ steps.version.outputs.version }}'" \
+            -o screensaver.exe \
+            ./cmd/screensaver
+
+      # Install Inno Setup 6 via Chocolatey (pre-installed on windows-latest)
+      - name: Install Inno Setup 6
+        shell: pwsh
+        run: choco install innosetup --yes --no-progress
+
+      # Compile the installer; outputs screensaver-setup.exe at repo root
+      - name: Build installer (ISCC)
+        shell: pwsh
+        run: |
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          & $iscc /DMyAppVersion=${{ steps.version.outputs.version }} packaging\windows\screensaver.iss
+
+      # Create a GitHub Release and upload both executables
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "Screensaver ${{ github.ref_name }}"
+          generate_release_notes: true
+          files: |
+            screensaver.exe
+            screensaver-setup.exe
