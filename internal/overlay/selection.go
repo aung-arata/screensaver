@@ -33,7 +33,7 @@ func (s *SelectionState) Update(x, y int) {
 }
 
 // End finalizes the selection and returns the selected rectangle.
-// Returns image.ZR if the selection has zero area.
+// Returns image.Rectangle{} if the selection has zero area.
 func (s *SelectionState) End() image.Rectangle {
 	s.active = false
 	return s.Bounds()
@@ -41,7 +41,7 @@ func (s *SelectionState) End() image.Rectangle {
 
 // Bounds returns the current selection rectangle normalized so that
 // Min is the top-left corner and Max is the bottom-right corner.
-// Returns image.ZR if the selection has zero area.
+// Returns image.Rectangle{} if the selection has zero area.
 func (s *SelectionState) Bounds() image.Rectangle {
 	return normalizeRect(s.startX, s.startY, s.currentX, s.currentY)
 }
@@ -61,12 +61,12 @@ func (s *SelectionState) Reset() {
 }
 
 // normalizeRect converts two arbitrary corner points into a canonical
-// image.Rectangle with Min <= Max. It returns image.ZR if the resulting
-// rectangle has zero width or height.
+// image.Rectangle with Min <= Max. It returns image.Rectangle{} if the
+// resulting rectangle has zero width or height.
 func normalizeRect(x1, y1, x2, y2 int) image.Rectangle {
 	r := image.Rect(x1, y1, x2, y2).Canon()
 	if r.Dx() == 0 || r.Dy() == 0 {
-		return image.ZR
+		return image.Rectangle{}
 	}
 	return r
 }

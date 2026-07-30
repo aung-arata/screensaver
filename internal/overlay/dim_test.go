@@ -117,7 +117,7 @@ func TestComposeSelection_EmptyRect(t *testing.T) {
 	origPix := make([]byte, len(dst.Pix))
 	copy(origPix, dst.Pix)
 
-	ComposeSelection(dst, src, image.ZR) // empty selection
+	ComposeSelection(dst, src, image.Rectangle{}) // empty selection
 
 	for i := range dst.Pix {
 		if dst.Pix[i] != origPix[i] {

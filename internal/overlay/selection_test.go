@@ -43,22 +43,22 @@ func TestNormalizeRect_BottomLeftToTopRight(t *testing.T) {
 
 func TestNormalizeRect_ZeroWidth(t *testing.T) {
 	r := normalizeRect(50, 20, 50, 100)
-	if r != image.ZR {
-		t.Errorf("expected image.ZR for zero-width, got %v", r)
+	if r != (image.Rectangle{}) {
+		t.Errorf("expected image.Rectangle{} for zero-width, got %v", r)
 	}
 }
 
 func TestNormalizeRect_ZeroHeight(t *testing.T) {
 	r := normalizeRect(20, 50, 100, 50)
-	if r != image.ZR {
-		t.Errorf("expected image.ZR for zero-height, got %v", r)
+	if r != (image.Rectangle{}) {
+		t.Errorf("expected image.Rectangle{} for zero-height, got %v", r)
 	}
 }
 
 func TestNormalizeRect_ZeroArea(t *testing.T) {
 	r := normalizeRect(50, 50, 50, 50)
-	if r != image.ZR {
-		t.Errorf("expected image.ZR for zero-area, got %v", r)
+	if r != (image.Rectangle{}) {
+		t.Errorf("expected image.Rectangle{} for zero-area, got %v", r)
 	}
 }
 
@@ -79,8 +79,8 @@ func TestSelectionState_InitiallyInactive(t *testing.T) {
 	if s.IsActive() {
 		t.Error("expected inactive initially")
 	}
-	if s.Bounds() != image.ZR {
-		t.Errorf("expected image.ZR initially, got %v", s.Bounds())
+	if s.Bounds() != (image.Rectangle{}) {
+		t.Errorf("expected image.Rectangle{} initially, got %v", s.Bounds())
 	}
 }
 
@@ -91,8 +91,8 @@ func TestSelectionState_BeginActivates(t *testing.T) {
 		t.Error("expected active after Begin")
 	}
 	// Before any Update the selection has zero area.
-	if s.Bounds() != image.ZR {
-		t.Errorf("expected image.ZR before drag, got %v", s.Bounds())
+	if s.Bounds() != (image.Rectangle{}) {
+		t.Errorf("expected image.Rectangle{} before drag, got %v", s.Bounds())
 	}
 }
 
@@ -138,8 +138,8 @@ func TestSelectionState_Reset(t *testing.T) {
 	if s.IsActive() {
 		t.Error("expected inactive after Reset")
 	}
-	if s.Bounds() != image.ZR {
-		t.Errorf("expected image.ZR after Reset, got %v", s.Bounds())
+	if s.Bounds() != (image.Rectangle{}) {
+		t.Errorf("expected image.Rectangle{} after Reset, got %v", s.Bounds())
 	}
 }
 
@@ -168,7 +168,7 @@ func TestSelectionState_EndWithZeroArea(t *testing.T) {
 	s.Begin(50, 50)
 	// No Update — same point.
 	r := s.End()
-	if r != image.ZR {
-		t.Errorf("expected image.ZR for zero-area end, got %v", r)
+	if r != (image.Rectangle{}) {
+		t.Errorf("expected image.Rectangle{} for zero-area end, got %v", r)
 	}
 }
