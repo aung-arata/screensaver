@@ -74,9 +74,10 @@ const (
 	edVkMinus   = 0xBD // VK_OEM_MINUS
 
 	// GDI
-	edBiRGB        = 0
+	edBiRGB      = 0
 	edDibRGBColors = 0
-	edSrcCopy      = 0x00CC0020
+	edSrcCopy    = 0x00CC0020
+	edHalftone   = 4 // HALFTONE stretch mode — high-quality downscale
 	edPsSolid      = 0
 	edNullBrush    = 5
 	edTransparent  = 1
@@ -264,6 +265,8 @@ var (
 	edProcSetBkModeGDI      = edGdi32.NewProc("SetBkMode")
 	edProcSetTextColorGDI   = edGdi32.NewProc("SetTextColor")
 	edProcStretchDIBits     = edGdi32.NewProc("StretchDIBits")
+	edProcSetStretchBltMode = edGdi32.NewProc("SetStretchBltMode")
+	edProcSetBrushOrgEx     = edGdi32.NewProc("SetBrushOrgEx")
 	edProcCreatePen         = edGdi32.NewProc("CreatePen")
 	edProcCreateSolidBrush  = edGdi32.NewProc("CreateSolidBrush")
 	edProcSelectObject      = edGdi32.NewProc("SelectObject")
@@ -907,6 +910,11 @@ func edPaintOnDC(dc uintptr, clientW, clientH int32) {
 				Compression: edBiRGB,
 			},
 		}
+		// Use HALFTONE stretch mode for high-quality scaling (avoids crosshatch
+		// artifacts when the image is displayed at zoom < 100%).
+		// MSDN requires SetBrushOrgEx to be called after HALFTONE.
+		edProcSetStretchBltMode.Call(dc, uintptr(edHalftone))
+		edProcSetBrushOrgEx.Call(dc, 0, 0, 0)
 		edProcStretchDIBits.Call(
 			dc,
 			uintptr(edState.imgX), uintptr(edState.imgY),
