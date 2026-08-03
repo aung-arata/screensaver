@@ -32,10 +32,15 @@ type input struct {
 }
 
 var (
-	user32           = windows.NewLazySystemDLL("user32.dll")
-	procSendInput    = user32.NewProc("SendInput")
-	procSetCursorPos = user32.NewProc("SetCursorPos")
-	procGetCursorPos = user32.NewProc("GetCursorPos")
+	user32                       = windows.NewLazySystemDLL("user32.dll")
+	procSendInput                = user32.NewProc("SendInput")
+	procSetCursorPos             = user32.NewProc("SetCursorPos")
+	procGetCursorPos             = user32.NewProc("GetCursorPos")
+	procWindowFromPoint          = user32.NewProc("WindowFromPoint")
+	procSetForegroundWindow      = user32.NewProc("SetForegroundWindow")
+	procGetForegroundWindow      = user32.NewProc("GetForegroundWindow")
+	procGetWindowThreadProcessId = user32.NewProc("GetWindowThreadProcessId")
+	procAttachThreadInput        = user32.NewProc("AttachThreadInput")
 )
 
 type point struct {
@@ -60,11 +65,39 @@ func setCursorPos(p point) error {
 	return nil
 }
 
+func focusWindowAt(x, y int) {
+	p := point{X: int32(x), Y: int32(y)}
+	hwnd, _, _ := procWindowFromPoint.Call(uintptr(unsafe.Pointer(&p)))
+	if hwnd == 0 {
+		return
+	}
+
+	fgHwnd, _, _ := procGetForegroundWindow.Call()
+	fgThread, _, _ := procGetWindowThreadProcessId.Call(fgHwnd, 0)
+	targetThread, _, _ := procGetWindowThreadProcessId.Call(hwnd, 0)
+
+	if fgThread != targetThread && targetThread != 0 {
+		procAttachThreadInput.Call(targetThread, fgThread, 1)
+	}
+
+	procSetForegroundWindow.Call(hwnd)
+
+	if fgThread != targetThread && targetThread != 0 {
+		procAttachThreadInput.Call(targetThread, fgThread, 0)
+	}
+
+	time.Sleep(50 * time.Millisecond)
+}
+
 func capturePlatform(region image.Rectangle, cfg Config) (image.Image, error) {
 	if orig, err := getCursorPos(); err == nil {
 		defer func() { _ = setCursorPos(orig) }()
 	}
 	// If getCursorPos fails, capture continues without cursor restoration.
+
+	centerX := region.Min.X + region.Dx()/2
+	centerY := region.Min.Y + region.Dy()/2
+	focusWindowAt(centerX, centerY)
 
 	prev, err := captureRegion(region)
 	if err != nil {

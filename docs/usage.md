@@ -82,6 +82,7 @@ screensaver --scroll --save-dir C:\Screenshots --scroll-delay 300 --scroll-step 
 
 Behavior:
 - `--scroll` uses region selection first (draw the scrollable area you want)
+- The window under the region center is automatically focused so wheel events reach the target application
 - Stops when no meaningful new content is detected or `--scroll-max` is reached
 - Output follows normal one-shot flow: editor, explicit output path, auto-save
   directory, or clipboard if no save path is provided
