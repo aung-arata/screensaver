@@ -7,7 +7,7 @@
 //	screensaver --select           # interactive region selection (overlay, Windows only)
 //	screensaver --once --edit      # capture full screen and open annotation editor
 //	screensaver --select --edit    # select a region and open annotation editor (Windows only)
-//	screensaver --scroll --edit    # experimental long-page capture and open editor (Windows only)
+//	screensaver --scroll --edit    # long-page capture and open editor (Windows only; on other platforms falls back to full-screen capture)
 //	screensaver --hotkey "ctrl+shift+p"  # use a custom hotkey
 //	screensaver --once --save-dir /path  # auto-save to directory with timestamped filename
 //	screensaver --select --save-dir /path  # select region and auto-save to directory
@@ -77,7 +77,7 @@ func getLastSavedPath() string {
 // - config <sub>: config file management subcommand.
 // - --version: prints the build-time Version and exits.
 // - --select: shows an interactive fullscreen region selector and captures the chosen area.
-// - --scroll: experimental Windows-only long-page capture with auto-scroll and stitching.
+// - --scroll: Windows-only long-page capture with auto-scroll and stitching (falls back to single full-screen capture on other platforms).
 // - --once: captures a full-screen screenshot once.
 // - default: starts daemon mode which registers a global hotkey (configurable via --hotkey).
 // The --output flag, when provided with --once, --select, or --scroll, saves the captured image to the given path.
@@ -85,7 +85,7 @@ func getLastSavedPath() string {
 func main() {
 	once := flag.Bool("once", false, "Capture one screenshot and exit (no background daemon)")
 	sel := flag.Bool("select", false, "Interactive region selection: dims the screen and lets you drag a rectangle")
-	scroll := flag.Bool("scroll", false, "Experimental Windows-only long-page capture with auto-scroll and vertical stitching")
+	scroll := flag.Bool("scroll", false, "Windows-only long-page capture with auto-scroll and vertical stitching (on other platforms falls back to a single full-screen capture)")
 	scrollDelay := flag.Int("scroll-delay", 250, "Delay in milliseconds between scroll/capture steps (use with --scroll)")
 	scrollStep := flag.Int("scroll-step", 120, "Mouse wheel delta step for auto-scroll in --scroll mode (typical values are multiples of 120)")
 	scrollMax := flag.Int("scroll-max", 20, "Maximum number of frames to capture in long-page mode")
@@ -180,12 +180,12 @@ func main() {
 		fmt.Fprintln(os.Stderr, "error: --scroll cannot be used with --select")
 		os.Exit(1)
 	}
-	if *scroll && runtime.GOOS != "windows" {
-		fmt.Fprintln(os.Stderr, "error: long-page capture is only supported on Windows right now")
-		os.Exit(1)
-	}
-
 	if *scroll {
+		if runtime.GOOS != "windows" {
+			fmt.Fprintln(os.Stderr, "notice: long-page capture is not supported on this platform; capturing full screen instead")
+			runOnce(*output, *edit, cfg)
+			return
+		}
 		runScroll(*output, *edit, cfg, scrollcapture.Config{
 			DelayMs:   *scrollDelay,
 			WheelStep: *scrollStep,
@@ -349,7 +349,7 @@ func runSelect(outputPath string, openEditor bool, cfg config.Config) {
 	fmt.Println("Region screenshot copied to clipboard")
 }
 
-// runScroll displays the region-selection overlay, performs experimental
+// runScroll displays the region-selection overlay, performs
 // Windows-only long-page capture with auto-scroll + vertical stitching, and
 // then routes output to editor/save/save-dir/clipboard.
 func runScroll(outputPath string, openEditor bool, cfg config.Config, sc scrollcapture.Config) {
