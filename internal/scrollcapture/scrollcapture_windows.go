@@ -42,6 +42,7 @@ var (
 	procGetWindowThreadProcessId = user32.NewProc("GetWindowThreadProcessId")
 	procAttachThreadInput        = user32.NewProc("AttachThreadInput")
 	procGetAncestor              = user32.NewProc("GetAncestor")
+	procGetCurrentThreadId       = user32.NewProc("GetCurrentThreadId")
 )
 
 const gaRoot = 2
@@ -83,14 +84,30 @@ func focusWindowAt(x, y int) error {
 		return fmt.Errorf("GetWindowThreadProcessId: failed to resolve target window thread")
 	}
 
+	currentThread, _, _ := procGetCurrentThreadId.Call()
+	if currentThread == 0 {
+		return fmt.Errorf("GetCurrentThreadId failed")
+	}
+
+	// Resolve the foreground thread, if there is a foreground window. The
+	// foreground thread is the one our calling thread must attach to, so that
+	// SetForegroundWindow below is permitted (see MSDN: a process may set the
+	// foreground window only if it is the foreground process or received the
+	// last input event).
 	var fgThread uintptr
 	if fgHwnd, _, _ := procGetForegroundWindow.Call(); fgHwnd != 0 {
 		fgThread, _, _ = procGetWindowThreadProcessId.Call(fgHwnd, 0)
+		if fgThread == 0 {
+			return fmt.Errorf("GetWindowThreadProcessId: failed to resolve foreground window thread")
+		}
 	}
 
+	// Attach our current thread to the foreground thread so it shares the
+	// foreground input state. This is the documented AttachThreadInput
+	// workaround that lets a background process bring a window forward.
 	attached := false
-	if fgThread != 0 && fgThread != targetThread {
-		if ret, _, _ := procAttachThreadInput.Call(targetThread, fgThread, 1); ret != 0 {
+	if fgThread != 0 && fgThread != currentThread {
+		if ret, _, _ := procAttachThreadInput.Call(currentThread, fgThread, 1); ret != 0 {
 			attached = true
 		}
 	}
@@ -98,7 +115,7 @@ func focusWindowAt(x, y int) error {
 	ret, _, _ := procSetForegroundWindow.Call(hwnd)
 
 	if attached {
-		procAttachThreadInput.Call(targetThread, fgThread, 0)
+		procAttachThreadInput.Call(currentThread, fgThread, 0)
 	}
 
 	if ret == 0 {
