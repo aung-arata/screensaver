@@ -6,7 +6,6 @@
 
 ## 🚧 In Progress (Windows)
 
-- **Window-first scroll capture** — two-phase selection: click target window to focus, then draw region inside it; auto-focuses window before each scroll.
 - **Enhanced annotation tools** – add ellipse, highlighter, blur/pixelate, crop, resizable shapes with rotation.
 - **Floating toolbar after selection** – replace separate editor‑only launch with an immediate toolbar offering Copy, Save, Edit (like Lightshot).
 - **Tray‑based Settings UI** – simple HTML/Go‑html dialog for hotkey, format, quality, save folder, upload service, history limits.
@@ -62,6 +61,7 @@
 - **Editor status bar** – 22px strip: `Tool │ Zoom │ Image │ Cursor`; selective `InvalidateRect` on mouse move
 - **Capture history** – `%APPDATA%\screensaver\history.json` (max 200 entries); `--history` / `--history-n` / `--history-clear` CLI flags; "Recent Screenshots" tray submenu (last 5)
 - **Scrolling / long‑page capture (Windows-first)** – `--scroll` mode with selected region, auto‑scroll, overlap‑based vertical stitching, stop‑on‑no‑new‑content; graceful full-screen fallback on non-Windows.
+- **Window-first scroll capture** – automatically focuses the window under the selected region before beginning the scroll loop so wheel events reach the target application; capture aborts with an error if the window cannot be focused.
 
 ---
 
