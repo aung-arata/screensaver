@@ -41,7 +41,10 @@ var (
 	procGetForegroundWindow      = user32.NewProc("GetForegroundWindow")
 	procGetWindowThreadProcessId = user32.NewProc("GetWindowThreadProcessId")
 	procAttachThreadInput        = user32.NewProc("AttachThreadInput")
+	procGetAncestor              = user32.NewProc("GetAncestor")
 )
+
+const gaRoot = 2
 
 type point struct {
 	X int32
@@ -65,28 +68,45 @@ func setCursorPos(p point) error {
 	return nil
 }
 
-func focusWindowAt(x, y int) {
+func focusWindowAt(x, y int) error {
 	p := point{X: int32(x), Y: int32(y)}
 	hwnd, _, _ := procWindowFromPoint.Call(uintptr(unsafe.Pointer(&p)))
 	if hwnd == 0 {
-		return
+		return fmt.Errorf("WindowFromPoint: no window at (%d, %d)", x, y)
+	}
+	if root, _, _ := procGetAncestor.Call(hwnd, gaRoot); root != 0 {
+		hwnd = root
 	}
 
-	fgHwnd, _, _ := procGetForegroundWindow.Call()
-	fgThread, _, _ := procGetWindowThreadProcessId.Call(fgHwnd, 0)
 	targetThread, _, _ := procGetWindowThreadProcessId.Call(hwnd, 0)
-
-	if fgThread != targetThread && targetThread != 0 {
-		procAttachThreadInput.Call(targetThread, fgThread, 1)
+	if targetThread == 0 {
+		return fmt.Errorf("GetWindowThreadProcessId: failed to resolve target window thread")
 	}
 
-	procSetForegroundWindow.Call(hwnd)
+	var fgThread uintptr
+	if fgHwnd, _, _ := procGetForegroundWindow.Call(); fgHwnd != 0 {
+		fgThread, _, _ = procGetWindowThreadProcessId.Call(fgHwnd, 0)
+	}
 
-	if fgThread != targetThread && targetThread != 0 {
+	attached := false
+	if fgThread != 0 && fgThread != targetThread {
+		if ret, _, _ := procAttachThreadInput.Call(targetThread, fgThread, 1); ret != 0 {
+			attached = true
+		}
+	}
+
+	ret, _, _ := procSetForegroundWindow.Call(hwnd)
+
+	if attached {
 		procAttachThreadInput.Call(targetThread, fgThread, 0)
 	}
 
+	if ret == 0 {
+		return fmt.Errorf("SetForegroundWindow: failed to focus target window")
+	}
+
 	time.Sleep(50 * time.Millisecond)
+	return nil
 }
 
 func capturePlatform(region image.Rectangle, cfg Config) (image.Image, error) {
@@ -97,7 +117,9 @@ func capturePlatform(region image.Rectangle, cfg Config) (image.Image, error) {
 
 	centerX := region.Min.X + region.Dx()/2
 	centerY := region.Min.Y + region.Dy()/2
-	focusWindowAt(centerX, centerY)
+	if err := focusWindowAt(centerX, centerY); err != nil {
+		return nil, err
+	}
 
 	prev, err := captureRegion(region)
 	if err != nil {

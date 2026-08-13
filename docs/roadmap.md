@@ -61,7 +61,7 @@
 - **Editor status bar** – 22px strip: `Tool │ Zoom │ Image │ Cursor`; selective `InvalidateRect` on mouse move
 - **Capture history** – `%APPDATA%\screensaver\history.json` (max 200 entries); `--history` / `--history-n` / `--history-clear` CLI flags; "Recent Screenshots" tray submenu (last 5)
 - **Scrolling / long‑page capture (Windows-first)** – `--scroll` mode with selected region, auto‑scroll, overlap‑based vertical stitching, stop‑on‑no‑new‑content; graceful full-screen fallback on non-Windows.
-- **Window-first scroll capture** – automatically focuses the window under the selected region before beginning the scroll loop so wheel events reach the target application.
+- **Window-first scroll capture** – automatically focuses the window under the selected region before beginning the scroll loop so wheel events reach the target application; capture aborts with an error if the window cannot be focused.
 
 ---
 
