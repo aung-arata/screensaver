@@ -27,3 +27,12 @@ type Result struct {
 func Show(monitor int) (*Result, error) {
 	return showPlatform(monitor)
 }
+
+// PickWindow dims the screen and waits for the user to click a window,
+// bringing that window to the foreground. The user can cancel with Escape.
+//
+// The returned Result has Cancelled set when the user pressed Escape; its
+// Region is always image.ZR. On non-Windows platforms an error is returned.
+func PickWindow(monitor int) (*Result, error) {
+	return pickPlatform(monitor)
+}

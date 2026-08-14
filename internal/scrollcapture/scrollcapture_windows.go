@@ -9,6 +9,7 @@ import (
 	"unsafe"
 
 	"github.com/aung-arata/screensaver/internal/capture"
+	"github.com/aung-arata/screensaver/internal/winfocus"
 	"golang.org/x/sys/windows"
 )
 
@@ -32,20 +33,11 @@ type input struct {
 }
 
 var (
-	user32                       = windows.NewLazySystemDLL("user32.dll")
-	procSendInput                = user32.NewProc("SendInput")
-	procSetCursorPos             = user32.NewProc("SetCursorPos")
-	procGetCursorPos             = user32.NewProc("GetCursorPos")
-	procWindowFromPoint          = user32.NewProc("WindowFromPoint")
-	procSetForegroundWindow      = user32.NewProc("SetForegroundWindow")
-	procGetForegroundWindow      = user32.NewProc("GetForegroundWindow")
-	procGetWindowThreadProcessId = user32.NewProc("GetWindowThreadProcessId")
-	procAttachThreadInput        = user32.NewProc("AttachThreadInput")
-	procGetAncestor              = user32.NewProc("GetAncestor")
-	procGetCurrentThreadId       = user32.NewProc("GetCurrentThreadId")
+	user32           = windows.NewLazySystemDLL("user32.dll")
+	procSendInput    = user32.NewProc("SendInput")
+	procSetCursorPos = user32.NewProc("SetCursorPos")
+	procGetCursorPos = user32.NewProc("GetCursorPos")
 )
-
-const gaRoot = 2
 
 type point struct {
 	X int32
@@ -69,63 +61,6 @@ func setCursorPos(p point) error {
 	return nil
 }
 
-func focusWindowAt(x, y int) error {
-	p := point{X: int32(x), Y: int32(y)}
-	hwnd, _, _ := procWindowFromPoint.Call(uintptr(unsafe.Pointer(&p)))
-	if hwnd == 0 {
-		return fmt.Errorf("WindowFromPoint: no window at (%d, %d)", x, y)
-	}
-	if root, _, _ := procGetAncestor.Call(hwnd, gaRoot); root != 0 {
-		hwnd = root
-	}
-
-	targetThread, _, _ := procGetWindowThreadProcessId.Call(hwnd, 0)
-	if targetThread == 0 {
-		return fmt.Errorf("GetWindowThreadProcessId: failed to resolve target window thread")
-	}
-
-	currentThread, _, _ := procGetCurrentThreadId.Call()
-	if currentThread == 0 {
-		return fmt.Errorf("GetCurrentThreadId failed")
-	}
-
-	// Resolve the foreground thread, if there is a foreground window. The
-	// foreground thread is the one our calling thread must attach to, so that
-	// SetForegroundWindow below is permitted (see MSDN: a process may set the
-	// foreground window only if it is the foreground process or received the
-	// last input event).
-	var fgThread uintptr
-	if fgHwnd, _, _ := procGetForegroundWindow.Call(); fgHwnd != 0 {
-		fgThread, _, _ = procGetWindowThreadProcessId.Call(fgHwnd, 0)
-		if fgThread == 0 {
-			return fmt.Errorf("GetWindowThreadProcessId: failed to resolve foreground window thread")
-		}
-	}
-
-	// Attach our current thread to the foreground thread so it shares the
-	// foreground input state. This is the documented AttachThreadInput
-	// workaround that lets a background process bring a window forward.
-	attached := false
-	if fgThread != 0 && fgThread != currentThread {
-		if ret, _, _ := procAttachThreadInput.Call(currentThread, fgThread, 1); ret != 0 {
-			attached = true
-		}
-	}
-
-	ret, _, _ := procSetForegroundWindow.Call(hwnd)
-
-	if attached {
-		procAttachThreadInput.Call(currentThread, fgThread, 0)
-	}
-
-	if ret == 0 {
-		return fmt.Errorf("SetForegroundWindow: failed to focus target window")
-	}
-
-	time.Sleep(50 * time.Millisecond)
-	return nil
-}
-
 func capturePlatform(region image.Rectangle, cfg Config) (image.Image, error) {
 	if orig, err := getCursorPos(); err == nil {
 		defer func() { _ = setCursorPos(orig) }()
@@ -134,7 +69,7 @@ func capturePlatform(region image.Rectangle, cfg Config) (image.Image, error) {
 
 	centerX := region.Min.X + region.Dx()/2
 	centerY := region.Min.Y + region.Dy()/2
-	if err := focusWindowAt(centerX, centerY); err != nil {
+	if err := winfocus.FocusAt(centerX, centerY); err != nil {
 		return nil, err
 	}
 

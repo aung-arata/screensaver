@@ -9,6 +9,7 @@ import (
 	"unsafe"
 
 	"github.com/aung-arata/screensaver/internal/capture"
+	"github.com/aung-arata/screensaver/internal/winfocus"
 	"golang.org/x/sys/windows"
 )
 
@@ -40,6 +41,7 @@ const (
 	vkEscape = 0x1B
 
 	swShow = 5
+	swHide = 0
 
 	dibRGBColors = 0
 	srcCopy      = 0x00CC0020
@@ -173,6 +175,11 @@ var (
 		monitorBounds image.Rectangle
 		crossCursor   uintptr
 
+		// picking enables window-pick mode: a single click resolves and
+		// focuses the window under the cursor instead of starting a selection.
+		picking bool
+		pickErr error
+
 		// Reusable paint buffers to avoid per-frame allocations.
 		paintFrame  *image.RGBA // composited RGBA frame
 		paintPixels []byte      // BGRA pixel buffer for GDI
@@ -211,6 +218,19 @@ func wndProc(hwnd, msg, wParam, lParam uintptr) uintptr {
 		return 1 // prevent flickering
 
 	case wmLButtonDown:
+		if ovState.picking {
+			// Window-pick mode: resolve and focus the window under the click.
+			// Hide our topmost overlay first so WindowFromPoint sees the
+			// window underneath rather than the overlay itself.
+			x, y := loWord(lParam), hiWord(lParam)
+			sx := ovState.monitorBounds.Min.X + x
+			sy := ovState.monitorBounds.Min.Y + y
+			procShowWindow.Call(hwnd, swHide)
+			ovState.pickErr = winfocus.FocusAt(sx, sy)
+			ovState.result = &Result{}
+			procDestroyWindow.Call(hwnd)
+			return 0
+		}
 		x, y := loWord(lParam), hiWord(lParam)
 		ovState.sel.Begin(x, y)
 		procSetCapture.Call(hwnd)
@@ -334,13 +354,39 @@ func nullBrushHandle() uintptr {
 }
 
 // ---------------------------------------------------------------------------
-// showPlatform displays a fullscreen overlay on the specified monitor that
-// lets the user select a rectangular region. It pins the goroutine to the OS
-// thread, captures the screen, creates a topmost popup window, and runs a
-// Win32 message loop until the user completes or cancels the selection. It
-// returns the final Result or an error if setup fails.
-
+// showPlatform displays the region-selection overlay.
 func showPlatform(monitor int) (*Result, error) {
+	ovState.picking = false
+	ovState.pickErr = nil
+	return runOverlay(monitor)
+}
+
+// pickPlatform displays the window-picking overlay: a single click focuses
+// the window under the cursor. Escape cancels.
+func pickPlatform(monitor int) (*Result, error) {
+	ovState.picking = true
+	ovState.pickErr = nil
+	res, err := runOverlay(monitor)
+	if err != nil {
+		return nil, err
+	}
+	if res.Cancelled {
+		return res, nil
+	}
+	if ovState.pickErr != nil {
+		return nil, ovState.pickErr
+	}
+	return res, nil
+}
+
+// runOverlay displays a fullscreen overlay on the specified monitor that
+// lets the user select a rectangular region (or, in pick mode, a window). It
+// pins the goroutine to the OS thread, captures the screen, creates a topmost
+// popup window, and runs a Win32 message loop until the user completes or
+// cancels the interaction. It returns the final Result or an error if setup
+// fails.
+
+func runOverlay(monitor int) (*Result, error) {
 	// Pin to the OS thread since Win32 window messages are thread-local.
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()

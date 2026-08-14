@@ -353,6 +353,18 @@ func runSelect(outputPath string, openEditor bool, cfg config.Config) {
 // Windows-only long-page capture with auto-scroll + vertical stitching, and
 // then routes output to editor/save/save-dir/clipboard.
 func runScroll(outputPath string, openEditor bool, cfg config.Config, sc scrollcapture.Config) {
+	// Phase 1: click a window to bring it to the foreground.
+	pick, err := overlay.PickWindow(0)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+	if pick.Cancelled {
+		fmt.Println("Selection cancelled")
+		return
+	}
+
+	// Phase 2: draw the region to capture inside the focused window.
 	result, err := overlay.Show(0)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)

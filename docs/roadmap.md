@@ -6,6 +6,7 @@
 
 ## 🚧 In Progress (Windows)
 
+- **Window-first scroll capture** — two-phase selection: click target window to focus, then draw region inside it; auto-focuses window before each scroll.
 - **Enhanced annotation tools** – add ellipse, highlighter, blur/pixelate, crop, resizable shapes with rotation.
 - **Floating toolbar after selection** – replace separate editor‑only launch with an immediate toolbar offering Copy, Save, Edit (like Lightshot).
 - **Tray‑based Settings UI** – simple HTML/Go‑html dialog for hotkey, format, quality, save folder, upload service, history limits.
