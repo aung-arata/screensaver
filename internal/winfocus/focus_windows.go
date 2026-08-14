@@ -21,13 +21,15 @@ const (
 )
 
 var (
-	user32                  = windows.NewLazySystemDLL("user32.dll")
-	procGetWindowTextW      = user32.NewProc("GetWindowTextW")
-	procGetWindowLongPtrW   = user32.NewProc("GetWindowLongPtrW")
-	procIsIconic            = user32.NewProc("IsIconic")
-	procShowWindow          = user32.NewProc("ShowWindow")
-	procSetForegroundWindow = user32.NewProc("SetForegroundWindow")
-	procAttachThreadInput   = user32.NewProc("AttachThreadInput")
+	user32                       = windows.NewLazySystemDLL("user32.dll")
+	procGetWindowTextW           = user32.NewProc("GetWindowTextW")
+	procGetWindowLongPtrW        = user32.NewProc("GetWindowLongPtrW")
+	procIsIconic                 = user32.NewProc("IsIconic")
+	procShowWindow               = user32.NewProc("ShowWindow")
+	procSetForegroundWindow      = user32.NewProc("SetForegroundWindow")
+	procGetForegroundWindow      = user32.NewProc("GetForegroundWindow")
+	procGetWindowThreadProcessId = user32.NewProc("GetWindowThreadProcessId")
+	procAttachThreadInput        = user32.NewProc("AttachThreadInput")
 )
 
 func enumerateWindows() ([]Window, error) {
@@ -102,10 +104,11 @@ func windowTitle(hwnd uintptr) (string, bool) {
 // focus brings the given top-level window to the foreground.
 //
 // If the window is minimized it is restored first. It then attaches the
-// calling thread to the target window's thread so that SetForegroundWindow is
-// permitted (see MSDN: a process may set the foreground window only if it is
-// the foreground process or received the last input event), and detaches
-// afterwards. It blocks briefly to let the foreground activation settle.
+// calling thread to the current foreground window's thread so that
+// SetForegroundWindow is permitted (see MSDN: a process may set the
+// foreground window only if it is the foreground process or received the last
+// input event), and detaches afterwards. It blocks briefly to let the
+// foreground activation settle.
 func focus(hwnd uintptr) error {
 	if hwnd == 0 {
 		return fmt.Errorf("winfocus: invalid window handle")
@@ -116,20 +119,22 @@ func focus(hwnd uintptr) error {
 		procShowWindow.Call(hwnd, swRestore)
 	}
 
-	tid, err := windows.GetWindowThreadProcessId(windows.HWND(hwnd), nil)
-	if err != nil {
-		return fmt.Errorf("GetWindowThreadProcessId: failed to resolve target window thread: %w", err)
-	}
-	targetThread := uintptr(tid)
-
 	currentThread := uintptr(windows.GetCurrentThreadId())
 	if currentThread == 0 {
 		return fmt.Errorf("GetCurrentThreadId failed")
 	}
 
+	var foregroundThread uintptr
+	if foregroundWindow, _, _ := procGetForegroundWindow.Call(); foregroundWindow != 0 {
+		foregroundThread, _, _ = procGetWindowThreadProcessId.Call(foregroundWindow, 0)
+		if foregroundThread == 0 {
+			return fmt.Errorf("GetWindowThreadProcessId: failed to resolve foreground window thread")
+		}
+	}
+
 	attached := false
-	if targetThread != currentThread {
-		if ret, _, _ := procAttachThreadInput.Call(currentThread, targetThread, 1); ret != 0 {
+	if foregroundThread != 0 && foregroundThread != currentThread {
+		if ret, _, _ := procAttachThreadInput.Call(currentThread, foregroundThread, 1); ret != 0 {
 			attached = true
 		}
 	}
@@ -137,7 +142,7 @@ func focus(hwnd uintptr) error {
 	ret, _, _ := procSetForegroundWindow.Call(hwnd)
 
 	if attached {
-		procAttachThreadInput.Call(currentThread, targetThread, 0)
+		procAttachThreadInput.Call(currentThread, foregroundThread, 0)
 	}
 
 	if ret == 0 {
