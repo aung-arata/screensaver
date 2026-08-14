@@ -1,13 +1,29 @@
-// Package winfocus provides helpers to locate and focus top-level windows on
-// Windows. It is used to bring a chosen window to the foreground before
-// sending synthetic scroll input, so wheel events reach the intended
-// application.
+// Package winfocus provides helpers to enumerate and focus top-level windows
+// on Windows. It is used to let the user pick a target window and then bring
+// it to the foreground before sending synthetic scroll input, so wheel events
+// reach the intended application.
 package winfocus
 
-// FocusAt resolves the top-level window under the given screen point and
-// brings it to the foreground.
+// Window describes a top-level window that can be focused.
+type Window struct {
+	// Handle is the top-level window handle (HWND).
+	Handle uintptr
+	// Title is the window's caption text.
+	Title string
+}
+
+// EnumerateWindows returns the visible top-level windows that are suitable
+// candidates for focus, filtering out invisible, tool, empty-titled, and
+// self-owned windows.
 //
 // On non-Windows platforms this always returns an error.
-func FocusAt(x, y int) error {
-	return focusAt(x, y)
+func EnumerateWindows() ([]Window, error) {
+	return enumerateWindows()
+}
+
+// Focus brings the given top-level window to the foreground.
+//
+// On non-Windows platforms this always returns an error.
+func Focus(hwnd uintptr) error {
+	return focus(hwnd)
 }

@@ -12,8 +12,3 @@ import "fmt"
 func showPlatform(monitor int) (*Result, error) {
 	return nil, fmt.Errorf("overlay: interactive selection overlay is not yet implemented for this platform; use --once for headless capture")
 }
-
-// pickPlatform is the non-Windows stub for window picking.
-func pickPlatform(monitor int) (*Result, error) {
-	return nil, fmt.Errorf("overlay: window picking is not yet implemented for this platform")
-}

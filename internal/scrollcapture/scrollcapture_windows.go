@@ -61,15 +61,13 @@ func setCursorPos(p point) error {
 	return nil
 }
 
-func capturePlatform(region image.Rectangle, cfg Config) (image.Image, error) {
+func capturePlatform(region image.Rectangle, cfg Config, target uintptr) (image.Image, error) {
 	if orig, err := getCursorPos(); err == nil {
 		defer func() { _ = setCursorPos(orig) }()
 	}
 	// If getCursorPos fails, capture continues without cursor restoration.
 
-	centerX := region.Min.X + region.Dx()/2
-	centerY := region.Min.Y + region.Dy()/2
-	if err := winfocus.FocusAt(centerX, centerY); err != nil {
+	if err := winfocus.Focus(target); err != nil {
 		return nil, err
 	}
 

@@ -81,8 +81,9 @@ screensaver --scroll --save-dir C:\Screenshots --scroll-delay 300 --scroll-step 
 ```
 
 Behavior:
-- `--scroll` uses two-phase selection: first click the target window to bring it to the foreground, then draw the region you want to capture inside it
-- The window under the region center is re-focused before scrolling so wheel events reach the target application; if the window cannot be focused, capture aborts with an error instead of scrolling
+- `--scroll` first lists the visible windows and prompts you to pick the target window (type its number, or `q` to cancel); the chosen window is brought to the foreground
+- You then draw the region you want to capture inside that window
+- The selected window is re-focused before scrolling so wheel events reach the target application; if the window cannot be focused, capture aborts with an error instead of scrolling
 - Stops when no meaningful new content is detected or `--scroll-max` is reached
 - Output follows normal one-shot flow: editor, explicit output path, auto-save
   directory, or clipboard if no save path is provided

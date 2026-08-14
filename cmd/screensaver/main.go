@@ -24,11 +24,13 @@
 package main
 
 import (
+	"bufio"
 	"flag"
 	"fmt"
 	"image"
 	"os"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -45,6 +47,7 @@ import (
 	"github.com/aung-arata/screensaver/internal/singleinstance"
 	"github.com/aung-arata/screensaver/internal/tray"
 	"github.com/aung-arata/screensaver/internal/utils"
+	"github.com/aung-arata/screensaver/internal/winfocus"
 )
 
 // Version is the application version, set at build time via ldflags.
@@ -349,22 +352,59 @@ func runSelect(outputPath string, openEditor bool, cfg config.Config) {
 	fmt.Println("Region screenshot copied to clipboard")
 }
 
-// runScroll displays the region-selection overlay, performs
-// Windows-only long-page capture with auto-scroll + vertical stitching, and
-// then routes output to editor/save/save-dir/clipboard.
+// pickWindow enumerates visible top-level windows, prints a numbered list to
+// stdout, and prompts the user to select one. It returns the selected window
+// handle, or 0 if the user cancels.
+func pickWindow() (uintptr, error) {
+	wins, err := winfocus.EnumerateWindows()
+	if err != nil {
+		return 0, err
+	}
+	if len(wins) == 0 {
+		return 0, fmt.Errorf("no windows available to select")
+	}
+
+	for i, w := range wins {
+		fmt.Printf("%3d. %s\n", i+1, w.Title)
+	}
+	fmt.Printf("Select a window (1-%d, or q to cancel): ", len(wins))
+
+	reader := bufio.NewReader(os.Stdin)
+	line, err := reader.ReadString('\n')
+	if err != nil && line == "" {
+		return 0, fmt.Errorf("reading selection: %v", err)
+	}
+	line = strings.TrimSpace(line)
+	if line == "" || line == "q" || line == "Q" {
+		return 0, nil
+	}
+	idx, err := strconv.Atoi(line)
+	if err != nil || idx < 1 || idx > len(wins) {
+		return 0, fmt.Errorf("invalid selection %q", line)
+	}
+	return wins[idx-1].Handle, nil
+}
+
+// runScroll lists top-level windows for the user to pick a target, focuses
+// it, then performs Windows-only long-page capture with auto-scroll + vertical
+// stitching, and finally routes output to editor/save/save-dir/clipboard.
 func runScroll(outputPath string, openEditor bool, cfg config.Config, sc scrollcapture.Config) {
-	// Phase 1: click a window to bring it to the foreground.
-	pick, err := overlay.PickWindow(0)
+	target, err := pickWindow()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)
 	}
-	if pick.Cancelled {
+	if target == 0 {
 		fmt.Println("Selection cancelled")
 		return
 	}
 
-	// Phase 2: draw the region to capture inside the focused window.
+	if err := winfocus.Focus(target); err != nil {
+		fmt.Fprintf(os.Stderr, "error focusing window: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Draw the region to capture inside the focused window.
 	result, err := overlay.Show(0)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
@@ -380,7 +420,7 @@ func runScroll(outputPath string, openEditor bool, cfg config.Config, sc scrollc
 		return
 	}
 
-	img, err := scrollcapture.Capture(result.Region, sc)
+	img, err := scrollcapture.Capture(result.Region, sc, target)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error capturing long-page: %v\n", err)
 		os.Exit(1)

@@ -35,13 +35,13 @@ type Config struct {
 }
 
 // Capture performs a Windows-only long-page capture for the given selected
-// region. It auto-scrolls between frames and returns the final vertically
-// stitched image.
-func Capture(region image.Rectangle, cfg Config) (image.Image, error) {
+// region, focusing target (the selected window handle) before scrolling. It
+// auto-scrolls between frames and returns the final vertically stitched image.
+func Capture(region image.Rectangle, cfg Config, target uintptr) (image.Image, error) {
 	if region.Dx() <= 0 || region.Dy() <= 0 {
 		return nil, fmt.Errorf("invalid region: %v", region)
 	}
-	return capturePlatform(region, normalizeConfig(cfg))
+	return capturePlatform(region, normalizeConfig(cfg), target)
 }
 
 func normalizeConfig(cfg Config) Config {
