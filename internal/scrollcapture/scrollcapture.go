@@ -25,6 +25,13 @@ const (
 	// maxOverlapScore is the maximum average absolute sampled RGB-channel
 	// difference (0..255 scale) accepted for a valid overlap match.
 	maxOverlapScore = 20.0
+	// minOverlapScoreMargin prevents an ambiguous repeated pattern from being
+	// accepted merely because one of several candidates has the lowest score.
+	minOverlapScoreMargin = 1.0
+	// staticRowThreshold is the maximum average absolute sampled RGB-channel
+	// difference (0..255 scale) below which a row is considered unchanged
+	// between consecutive frames (i.e. fixed header/footer UI).
+	staticRowThreshold = 2.0
 )
 
 // Config controls long-page auto-scroll capture behavior.
@@ -35,13 +42,22 @@ type Config struct {
 }
 
 // Capture performs a Windows-only long-page capture for the given selected
-// region. It auto-scrolls between frames and returns the final vertically
-// stitched image.
-func Capture(region image.Rectangle, cfg Config) (image.Image, error) {
+// region, focusing target (the selected window handle) before scrolling. It
+// auto-scrolls between frames and returns the final vertically stitched image.
+//
+// If the vertical overlap between two consecutive frames cannot be determined,
+// the returned image is the partial result captured so far and the error
+// describes the overlap failure. Callers must treat a non-nil image with a
+// non-nil error as a partial capture rather than a total failure.
+func Capture(region image.Rectangle, cfg Config, target uintptr) (image.Image, error) {
 	if region.Dx() <= 0 || region.Dy() <= 0 {
 		return nil, fmt.Errorf("invalid region: %v", region)
 	}
-	return capturePlatform(region, normalizeConfig(cfg))
+	return capturePlatform(region, normalizeConfig(cfg), target)
+}
+
+func wheelDelta(step int) uint32 {
+	return uint32(int32(-step)) << 16
 }
 
 func normalizeConfig(cfg Config) Config {
@@ -140,18 +156,31 @@ func findBestVerticalOverlap(prev, curr *image.RGBA) (int, bool) {
 		return 0, false
 	}
 
+	// Fixed UI (sticky headers and fixed bottom controls) occupies the same
+	// rows in every frame, so it never provides scroll alignment signal. Detect
+	// those static rows once and exclude them from every candidate match.
+	topStatic, bottomStatic := detectStaticEdges(prev, curr)
+
 	bestOverlap := 0
 	bestScore := 1e9
+	secondBestScore := 1e9
+	consider := func(overlap int, score float64) {
+		if score < bestScore {
+			secondBestScore = bestScore
+			bestScore = score
+			bestOverlap = overlap
+			return
+		}
+		if overlap != bestOverlap && score < secondBestScore {
+			secondBestScore = score
+		}
+	}
 	for overlap := minOverlap; overlap <= maxOverlap; overlap += overlapCoarseStep {
-		startPrev := h - overlap
-		score, ok := sampleAverageDiff(prev, curr, overlapStepX, overlapStepY, startPrev, h, 0)
+		score, ok := scoreVerticalOverlap(prev, curr, overlap, topStatic, bottomStatic)
 		if !ok {
 			continue
 		}
-		if score < bestScore {
-			bestScore = score
-			bestOverlap = overlap
-		}
+		consider(overlap, score)
 	}
 	if bestOverlap == 0 {
 		return 0, false
@@ -169,21 +198,68 @@ func findBestVerticalOverlap(prev, curr *image.RGBA) (int, bool) {
 		if (overlap-minOverlap)%overlapCoarseStep == 0 {
 			continue
 		}
-		startPrev := h - overlap
-		score, ok := sampleAverageDiff(prev, curr, overlapStepX, overlapStepY, startPrev, h, 0)
+		score, ok := scoreVerticalOverlap(prev, curr, overlap, topStatic, bottomStatic)
 		if !ok {
 			continue
 		}
-		if score < bestScore {
-			bestScore = score
-			bestOverlap = overlap
-		}
+		consider(overlap, score)
 	}
 
 	if bestScore > maxOverlapScore {
 		return 0, false
 	}
+	if secondBestScore-bestScore < minOverlapScoreMargin {
+		return 0, false
+	}
 	return bestOverlap, true
+}
+
+// detectStaticEdges returns the number of rows at the top and bottom of the
+// frame that are unchanged between prev and curr. These are fixed UI regions
+// (sticky header, fixed footer) that stay in place while content scrolls, so
+// they must not participate in overlap scoring.
+func detectStaticEdges(prev, curr *image.RGBA) (top, bottom int) {
+	h := prev.Bounds().Dy()
+	maxEdge := h / 4
+	for y := 0; y < maxEdge; y++ {
+		diff, ok := rowAverageDiff(prev, curr, y)
+		if !ok || diff > staticRowThreshold {
+			break
+		}
+		top++
+	}
+	for y := h - 1; y >= h-maxEdge; y-- {
+		diff, ok := rowAverageDiff(prev, curr, y)
+		if !ok || diff > staticRowThreshold {
+			break
+		}
+		bottom++
+	}
+	return top, bottom
+}
+
+func rowAverageDiff(a, b *image.RGBA, y int) (float64, bool) {
+	return sampleAverageDiff(a, b, frameDiffStepX, 1, y, y+1, y)
+}
+
+// scoreVerticalOverlap scores the candidate vertical overlap between the
+// bottom of prev and the top of curr, restricted to the scrolling content
+// region only (excluding the detected static header and footer rows).
+func scoreVerticalOverlap(prev, curr *image.RGBA, overlap, topStatic, bottomStatic int) (float64, bool) {
+	h := prev.Bounds().Dy()
+	length := overlap - topStatic - bottomStatic
+	if length <= 0 {
+		return 0, false
+	}
+	return sampleAverageDiff(
+		prev,
+		curr,
+		overlapStepX,
+		overlapStepY,
+		h-overlap+topStatic,
+		h-bottomStatic,
+		topStatic,
+	)
 }
 
 func sampleAverageDiff(a, b *image.RGBA, stepX, stepY, aYStart, aYEnd, bYStart int) (float64, bool) {
