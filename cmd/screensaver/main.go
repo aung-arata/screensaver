@@ -367,22 +367,24 @@ func pickWindow() (uintptr, error) {
 	for i, w := range wins {
 		fmt.Printf("%3d. %s\n", i+1, w.Title)
 	}
-	fmt.Printf("Select a window (1-%d, or q to cancel): ", len(wins))
 
 	reader := bufio.NewReader(os.Stdin)
-	line, err := reader.ReadString('\n')
-	if err != nil && line == "" {
-		return 0, fmt.Errorf("reading selection: %v", err)
+	for {
+		fmt.Printf("Select a window (1-%d, or q to cancel): ", len(wins))
+		line, err := reader.ReadString('\n')
+		if err != nil && line == "" {
+			return 0, fmt.Errorf("reading selection: %v", err)
+		}
+		line = strings.TrimSpace(line)
+		if line == "" || line == "q" || line == "Q" {
+			return 0, nil
+		}
+		idx, err := strconv.Atoi(line)
+		if err == nil && idx >= 1 && idx <= len(wins) {
+			return wins[idx-1].Handle, nil
+		}
+		fmt.Fprintf(os.Stderr, "invalid selection %q, try again\n", line)
 	}
-	line = strings.TrimSpace(line)
-	if line == "" || line == "q" || line == "Q" {
-		return 0, nil
-	}
-	idx, err := strconv.Atoi(line)
-	if err != nil || idx < 1 || idx > len(wins) {
-		return 0, fmt.Errorf("invalid selection %q", line)
-	}
-	return wins[idx-1].Handle, nil
 }
 
 // runScroll lists top-level windows for the user to pick a target, focuses
@@ -422,8 +424,11 @@ func runScroll(outputPath string, openEditor bool, cfg config.Config, sc scrollc
 
 	img, err := scrollcapture.Capture(result.Region, sc, target)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "error capturing long-page: %v\n", err)
-		os.Exit(1)
+		if img == nil {
+			fmt.Fprintf(os.Stderr, "error capturing long-page: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Fprintf(os.Stderr, "warning: %v (saved partial capture)\n", err)
 	}
 
 	if openEditor {

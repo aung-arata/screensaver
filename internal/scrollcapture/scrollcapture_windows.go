@@ -94,7 +94,7 @@ func capturePlatform(region image.Rectangle, cfg Config, target uintptr) (image.
 
 		overlap, ok := findBestVerticalOverlap(last, curr)
 		if !ok {
-			return nil, fmt.Errorf("could not determine overlap between scroll frames at frame %d", i)
+			return stitchFrames(parts), fmt.Errorf("could not determine overlap between scroll frames at frame %d", i)
 		}
 		newHeight := curr.Bounds().Dy() - overlap
 		if newHeight < minNewContentPx {
