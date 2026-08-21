@@ -44,6 +44,11 @@ type Config struct {
 // Capture performs a Windows-only long-page capture for the given selected
 // region, focusing target (the selected window handle) before scrolling. It
 // auto-scrolls between frames and returns the final vertically stitched image.
+//
+// If the vertical overlap between two consecutive frames cannot be determined,
+// the returned image is the partial result captured so far and the error
+// describes the overlap failure. Callers must treat a non-nil image with a
+// non-nil error as a partial capture rather than a total failure.
 func Capture(region image.Rectangle, cfg Config, target uintptr) (image.Image, error) {
 	if region.Dx() <= 0 || region.Dy() <= 0 {
 		return nil, fmt.Errorf("invalid region: %v", region)
