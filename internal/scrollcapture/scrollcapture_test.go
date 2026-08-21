@@ -27,6 +27,15 @@ func TestFindBestVerticalOverlap_UnrelatedFrames(t *testing.T) {
 	}
 }
 
+func TestWheelDelta(t *testing.T) {
+	if got := wheelDelta(120); got != 0xFF880000 {
+		t.Fatalf("step=120: got %#x, want 0xFF880000", got)
+	}
+	if got := wheelDelta(960); got != 0xFC400000 {
+		t.Fatalf("step=960: got %#x, want 0xFC400000", got)
+	}
+}
+
 func TestFindBestVerticalOverlap_AmbiguousRepeatedContent(t *testing.T) {
 	prev := makePeriodicFrame(120, 220, 0, 20)
 	curr := makePeriodicFrame(120, 220, 10, 20)

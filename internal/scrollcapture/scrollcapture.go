@@ -56,6 +56,10 @@ func Capture(region image.Rectangle, cfg Config, target uintptr) (image.Image, e
 	return capturePlatform(region, normalizeConfig(cfg), target)
 }
 
+func wheelDelta(step int) uint32 {
+	return uint32(int32(-step)) << 16
+}
+
 func normalizeConfig(cfg Config) Config {
 	if cfg.DelayMs <= 0 {
 		cfg.DelayMs = defaultDelayMs

@@ -141,7 +141,7 @@ func sendScrollAtRegionCenter(region image.Rectangle, step int) error {
 	in := input{
 		Type: inputMouse,
 		MI: mouseInput{
-			MouseData: uint32(int32(-step)),
+			MouseData: wheelDelta(step),
 			Flags:     mouseeventfWheel,
 		},
 	}
