@@ -1,11 +1,13 @@
 // Content script — injected into the target page. Handles DOM-side capture
-// ops: fixed-element fixing, scrolling step, restoration.
+// ops: fixed-element fixing, scrolling step, exact restoration.
 
 import type { PageMeta } from "./shared";
 
-const PersistAttr = "data-ssw-persist";
-
 type Msg = { cmd: "viewportInfo" | "fixRegion" | "step" | "restore" };
+
+// Exact original inline styles of every mutated element, keyed by node.
+const savedStyles = new Map<HTMLElement, string>();
+let savedScroll: { x: number; y: number } | null = null;
 
 function doc(): HTMLElement {
   return document.documentElement;
@@ -15,6 +17,7 @@ function viewportInfo(): PageMeta {
   return {
     title: document.title,
     viewportWidth: doc().clientWidth,
+    viewportHeight: doc().clientHeight,
     totalHeight: Math.max(doc().scrollHeight, document.body.scrollHeight),
     dpr: window.devicePixelRatio,
     scrollbarOverlap: window.innerWidth - doc().clientWidth,
@@ -26,29 +29,29 @@ function isVisible(node: HTMLElement): boolean {
   return cs.display !== "none" && cs.visibility !== "hidden";
 }
 
+// Rewrite fixed/sticky elements to absolute so they don't repeat in every
+// frame, save their exact inline styles, then scroll to the page top.
 function fixRegion(): void {
+  savedScroll = { x: window.scrollX, y: window.scrollY };
   for (const node of Array.from(document.querySelectorAll<HTMLElement>("*"))) {
     if (!isVisible(node)) continue;
     const cs = getComputedStyle(node);
     if (cs.position === "fixed" || cs.position === "sticky") {
-      node.setAttribute(PersistAttr, JSON.stringify({ position: cs.position }));
+      savedStyles.set(node, node.style.cssText);
       node.style.setProperty("position", "absolute", "important");
     }
   }
+  window.scrollTo(0, 0);
 }
 
 function restore(): void {
-  for (const node of Array.from(document.querySelectorAll(`[${PersistAttr}]`))) {
-    const originals = JSON.parse(node.getAttribute(PersistAttr) || "{}") as Record<string, string>;
-    node.removeAttribute(PersistAttr);
-    for (const k of Object.keys(originals)) {
-      const v = originals[k];
-      if (v === undefined) {
-        (node as HTMLElement).style.removeProperty(k);
-      } else {
-        (node as HTMLElement).style.setProperty(k, v, "important");
-      }
-    }
+  for (const [node, cssText] of savedStyles) {
+    node.style.cssText = cssText;
+  }
+  savedStyles.clear();
+  if (savedScroll) {
+    window.scrollTo(savedScroll.x, savedScroll.y);
+    savedScroll = null;
   }
 }
 

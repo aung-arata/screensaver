@@ -8,22 +8,23 @@ export async function stitch(frames: Frame[], info: PageMeta): Promise<HTMLCanva
 
   const sorted = [...frames].sort((a, b) => a.scrollY - b.scrollY);
   const minY = sorted[0].scrollY;
-  const maxY = sorted[sorted.length - 1].scrollY + info.totalHeight; // top of last + remaining tail
+  const last = sorted[sorted.length - 1];
+
+  // Real captured height: last frame's offset + one viewport. This is the
+  // truth even if the page grew from lazy loading mid-capture.
+  const cssHeight = last.scrollY + info.viewportHeight - minY;
 
   const canvas = document.createElement("canvas");
-  canvas.width = info.viewportWidth * info.dpr;
-  canvas.height = maxY * info.dpr;
+  canvas.width = Math.round(info.viewportWidth * info.dpr);
+  canvas.height = Math.round(cssHeight * info.dpr);
   const ctx = canvas.getContext("2d")!;
-  ctx.imageSmoothingEnabled = false;
 
   for (const frame of sorted) {
     const img = await toImage(frame.dataUrl);
-    // Crop scrollbar area on right; start x from scrollbarOverlap to skip the scrollbar
-    const sx = info.scrollbarOverlap * info.dpr;
+    // Crop the right-side scrollbar: source starts at x=0 with reduced width.
     const sw = img.width - info.scrollbarOverlap * info.dpr;
-    const dx = 0;
     const dy = (frame.scrollY - minY) * info.dpr;
-    ctx.drawImage(img, sx, 0, sw, img.height, dx, dy, sw, img.height);
+    ctx.drawImage(img, 0, 0, sw, img.height, 0, dy, sw, img.height);
   }
   return canvas;
 }

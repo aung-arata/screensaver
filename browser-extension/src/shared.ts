@@ -8,6 +8,7 @@ export interface Frame {
 export interface PageMeta {
   title: string;
   viewportWidth: number;
+  viewportHeight: number;
   totalHeight: number;
   dpr: number;
   scrollbarOverlap: number;

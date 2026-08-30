@@ -1,10 +1,17 @@
-// Background service worker — orchestrates capture, holding frames in memory
-// to be served to viewer tabs via persistent ports.
+// Background service worker — orchestrates full-page capture and serves
+// results to viewer pages via persistent ports.
 
 import type { CaptureJob, Frame, PageMeta, StepDone, ViewportInfo } from "./shared";
 import { MAX_CAPTURED_FRAMES } from "./shared";
 
 const jobs = new Map<string, CaptureJob>();
+
+// Chrome limits captureVisibleTab to 2 calls/sec. 600ms between captures
+// stays under the quota and doubles as scroll/render settle time.
+const CAPTURE_INTERVAL_MS = 600;
+const SETTLE_MS = 250;
+// Conservative canvas height guard (Chrome canvas caps near 16384px/side).
+const MAX_CANVAS_PX = 16000;
 
 chrome.action.onClicked.addListener((tab) => void startCapture(tab));
 
@@ -30,28 +37,7 @@ async function startCapture(tab: chrome.tabs.Tab): Promise<void> {
   }
 
   try {
-    await chrome.scripting.executeScript({ target: { tabId: tab.id! }, files: ["content.js"] });
-    // small settle — chrome.scripting resolves before listener is registered in some edge cases
-    await new Promise((r) => setTimeout(r, 50));
-    const info = (await command(tab.id!, "viewportInfo")) as ViewportInfo;
-    await command(tab.id!, "fixRegion");
-
-    const frames: Frame[] = [];
-    const viewportPx = info.viewportWidth;
-    void viewportPx;
-
-    let y = 0;
-    while (y < info.totalHeight && frames.length < MAX_CAPTURED_FRAMES) {
-      const step = (await command(tab.id!, "step")) as StepDone;
-      const shot = await chrome.tabs.captureVisibleTab(tab.windowId, { format: "png" });
-      frames.push({ scrollY: step.y, dataUrl: shot });
-      y = step.y;
-    }
-
-    await command(tab.id!, "restore");
-
-    jobs.set(jobId, { meta: { complete: true }, frames, info });
-    chrome.tabs.create({ url: `viewer.html#${jobId}` });
+    jobs.set(jobId, await capture(tab));
   } catch (e) {
     console.error("capture error", e);
     jobs.set(jobId, {
@@ -59,14 +45,58 @@ async function startCapture(tab: chrome.tabs.Tab): Promise<void> {
       frames: [],
       info: emptyInfo(),
     });
-    chrome.tabs.create({ url: `viewer.html#${jobId}` });
   }
+  chrome.tabs.create({ url: `viewer.html#${jobId}` });
+}
+
+async function capture(tab: chrome.tabs.Tab): Promise<CaptureJob> {
+  const tabId = tab.id!;
+  await chrome.scripting.executeScript({ target: { tabId }, files: ["content.js"] });
+  await delay(50); // let the injected listener register
+
+  const info = (await command(tabId, "viewportInfo")) as ViewportInfo;
+  const maxFrames = Math.max(
+    1,
+    Math.min(MAX_CAPTURED_FRAMES, Math.floor(MAX_CANVAS_PX / (info.viewportHeight * info.dpr)))
+  );
+
+  const frames: Frame[] = [];
+  try {
+    await command(tabId, "fixRegion"); // also scrolls to page top
+    await delay(SETTLE_MS); // re-layout after rewriting fixed elements
+
+    // Capture the first viewport BEFORE any scrolling (fixRegion scrolled to top).
+    let scrollY = 0;
+    frames.push({ scrollY, dataUrl: await snap(tab) });
+
+    // Step until the scroll position stops advancing (page bottom).
+    while (frames.length < maxFrames) {
+      const step = (await command(tabId, "step")) as StepDone;
+      if (step.y <= scrollY) break;
+      scrollY = step.y;
+      await delay(CAPTURE_INTERVAL_MS);
+      frames.push({ scrollY, dataUrl: await snap(tab) });
+    }
+  } finally {
+    // Always restore: original inline styles + original scroll position.
+    await command(tabId, "restore").catch(() => void 0);
+  }
+
+  return { meta: { complete: true }, frames, info };
+}
+
+async function snap(tab: chrome.tabs.Tab): Promise<string> {
+  return chrome.tabs.captureVisibleTab(tab.windowId, { format: "png" });
 }
 
 type Cmd = "viewportInfo" | "fixRegion" | "step" | "restore";
 
-async function command(tabId: number, cmd: Cmd): Promise<ViewportInfo | StepDone | PageMeta> {
-  return (await chrome.tabs.sendMessage(tabId, { cmd })) as ViewportInfo | StepDone | PageMeta;
+async function command(tabId: number, cmd: Cmd): Promise<ViewportInfo | StepDone> {
+  return (await chrome.tabs.sendMessage(tabId, { cmd })) as ViewportInfo | StepDone;
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((r) => setTimeout(r, ms));
 }
 
 function isBlocked(url?: string): boolean {
@@ -79,5 +109,12 @@ function isBlocked(url?: string): boolean {
 }
 
 function emptyInfo(): PageMeta {
-  return { title: "", viewportWidth: 0, totalHeight: 0, dpr: 1, scrollbarOverlap: 0 };
+  return {
+    title: "",
+    viewportWidth: 0,
+    viewportHeight: 0,
+    totalHeight: 0,
+    dpr: 1,
+    scrollbarOverlap: 0,
+  };
 }
