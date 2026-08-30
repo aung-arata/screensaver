@@ -61,6 +61,7 @@ async function capture(tab: chrome.tabs.Tab): Promise<CaptureJob> {
   );
 
   const frames: Frame[] = [];
+  let truncated = false;
   try {
     await command(tabId, "fixRegion"); // also scrolls to page top
     await delay(SETTLE_MS); // re-layout after rewriting fixed elements
@@ -77,15 +78,41 @@ async function capture(tab: chrome.tabs.Tab): Promise<CaptureJob> {
       await delay(CAPTURE_INTERVAL_MS);
       frames.push({ scrollY, dataUrl: await snap(tab) });
     }
+
+    // If we exited via the frame cap and the bottom wasn't reached, the
+    // result is a truncated page — say so instead of pretending completeness.
+    truncated = frames.length >= maxFrames && scrollY + info.viewportHeight < info.totalHeight;
   } finally {
     // Always restore: original inline styles + original scroll position.
     await command(tabId, "restore").catch(() => void 0);
   }
 
-  return { meta: { complete: true }, frames, info };
+  return {
+    meta: {
+      complete: true,
+      warning: truncated
+        ? `Page truncated: captured first ~${Math.round(
+            scrollYOfLast(frames) + info.viewportHeight
+          )}px of ${info.totalHeight}px (canvas size limit).`
+        : undefined,
+    },
+    frames,
+    info,
+  };
 }
 
+function scrollYOfLast(frames: Frame[]): number {
+  return frames.length ? frames[frames.length - 1].scrollY : 0;
+}
+
+// captureVisibleTab grabs the ACTIVE tab of the window, so verify the target
+// tab is still active before every capture — a tab switch mid-capture would
+// otherwise splice frames from an unrelated page into the stitch.
 async function snap(tab: chrome.tabs.Tab): Promise<string> {
+  const current = await chrome.tabs.get(tab.id!);
+  if (!current.active) {
+    throw new Error("capture aborted: target tab lost focus");
+  }
   return chrome.tabs.captureVisibleTab(tab.windowId, { format: "png" });
 }
 

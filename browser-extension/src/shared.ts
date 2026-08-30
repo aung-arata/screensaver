@@ -23,6 +23,8 @@ export interface CaptureJob {
   meta: {
     complete: boolean;
     error?: string;
+    /** Set when the capture succeeded but was cut short (e.g. frame cap). */
+    warning?: string;
   };
   frames: Frame[];
   info: PageMeta;

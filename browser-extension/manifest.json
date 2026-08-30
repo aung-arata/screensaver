@@ -3,7 +3,7 @@
   "name": "Screensaver — Full Page Capture",
   "version": "0.1.0",
   "description": "Capture the full scrollable page as one stitched image. Save as PNG, JPG, or PDF.",
-  "permissions": ["activeTab", "scripting", "downloads"],
+  "permissions": ["activeTab", "scripting", "downloads", "clipboardWrite"],
   "action": {
     "default_title": "Capture full page"
   },

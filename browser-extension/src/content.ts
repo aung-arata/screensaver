@@ -1,79 +1,94 @@
 // Content script — injected into the target page. Handles DOM-side capture
 // ops: fixed-element fixing, scrolling step, exact restoration.
+//
+// The background re-injects this file on every capture, so listener
+// registration is guarded to run only once per page context.
 
 import type { PageMeta } from "./shared";
 
-type Msg = { cmd: "viewportInfo" | "fixRegion" | "step" | "restore" };
+const InjectedKey = "__sswInjected";
+const g = globalThis as unknown as Record<string, boolean | undefined>;
 
-// Exact original inline styles of every mutated element, keyed by node.
-const savedStyles = new Map<HTMLElement, string>();
-let savedScroll: { x: number; y: number } | null = null;
-
-function doc(): HTMLElement {
-  return document.documentElement;
+if (!g[InjectedKey]) {
+  g[InjectedKey] = true;
+  register();
 }
 
-function viewportInfo(): PageMeta {
-  return {
-    title: document.title,
-    viewportWidth: doc().clientWidth,
-    viewportHeight: doc().clientHeight,
-    totalHeight: Math.max(doc().scrollHeight, document.body.scrollHeight),
-    dpr: window.devicePixelRatio,
-    scrollbarOverlap: window.innerWidth - doc().clientWidth,
-  };
-}
+function register(): void {
+  type Msg = { cmd: "viewportInfo" | "fixRegion" | "step" | "restore" };
 
-function isVisible(node: HTMLElement): boolean {
-  const cs = getComputedStyle(node);
-  return cs.display !== "none" && cs.visibility !== "hidden";
-}
+  // Exact original inline styles of every mutated element, keyed by node.
+  const savedStyles = new Map<HTMLElement, string>();
+  let savedScroll: { x: number; y: number } | null = null;
 
-// Rewrite fixed/sticky elements to absolute so they don't repeat in every
-// frame, save their exact inline styles, then scroll to the page top.
-function fixRegion(): void {
-  savedScroll = { x: window.scrollX, y: window.scrollY };
-  for (const node of Array.from(document.querySelectorAll<HTMLElement>("*"))) {
-    if (!isVisible(node)) continue;
+  function doc(): HTMLElement {
+    return document.documentElement;
+  }
+
+  function viewportInfo(): PageMeta {
+    return {
+      title: document.title,
+      viewportWidth: doc().clientWidth,
+      viewportHeight: doc().clientHeight,
+      totalHeight: Math.max(doc().scrollHeight, document.body.scrollHeight),
+      dpr: window.devicePixelRatio,
+      scrollbarOverlap: window.innerWidth - doc().clientWidth,
+    };
+  }
+
+  function isVisible(node: HTMLElement): boolean {
     const cs = getComputedStyle(node);
-    if (cs.position === "fixed" || cs.position === "sticky") {
-      savedStyles.set(node, node.style.cssText);
-      node.style.setProperty("position", "absolute", "important");
+    return cs.display !== "none" && cs.visibility !== "hidden";
+  }
+
+  // Rewrite fixed/sticky elements to absolute so they don't repeat in every
+  // frame, save their exact inline styles, then scroll to the page top.
+  function fixRegion(): void {
+    savedScroll = { x: window.scrollX, y: window.scrollY };
+    for (const node of Array.from(document.querySelectorAll<HTMLElement>("*"))) {
+      if (!isVisible(node)) continue;
+      const cs = getComputedStyle(node);
+      if (cs.position === "fixed" || cs.position === "sticky") {
+        savedStyles.set(node, node.style.cssText);
+        node.style.setProperty("position", "absolute", "important");
+      }
+    }
+    // behavior: "instant" defeats CSS scroll-behavior: smooth, so the
+    // position is final when the next line reads it.
+    window.scrollTo({ top: 0, behavior: "instant" });
+  }
+
+  function restore(): void {
+    for (const [node, cssText] of savedStyles) {
+      node.style.cssText = cssText;
+    }
+    savedStyles.clear();
+    if (savedScroll) {
+      window.scrollTo({ top: savedScroll.y, left: savedScroll.x, behavior: "instant" });
+      savedScroll = null;
     }
   }
-  window.scrollTo(0, 0);
-}
 
-function restore(): void {
-  for (const [node, cssText] of savedStyles) {
-    node.style.cssText = cssText;
-  }
-  savedStyles.clear();
-  if (savedScroll) {
-    window.scrollTo(savedScroll.x, savedScroll.y);
-    savedScroll = null;
-  }
+  chrome.runtime.onMessage.addListener((msg: Msg, _sender, respond) => {
+    let reply: PageMeta | { kind: string; y: number };
+    switch (msg.cmd) {
+      case "viewportInfo":
+        reply = viewportInfo();
+        break;
+      case "fixRegion":
+        fixRegion();
+        reply = { kind: "stepDone", y: window.scrollY };
+        break;
+      case "step":
+        window.scrollTo({ top: window.scrollY + doc().clientHeight, behavior: "instant" });
+        reply = { kind: "stepDone", y: window.scrollY };
+        break;
+      case "restore":
+        restore();
+        reply = { kind: "stepDone", y: window.scrollY };
+        break;
+    }
+    respond(reply);
+    return true;
+  });
 }
-
-chrome.runtime.onMessage.addListener((msg: Msg, _sender, respond) => {
-  let reply: PageMeta | { kind: string; y: number };
-  switch (msg.cmd) {
-    case "viewportInfo":
-      reply = viewportInfo();
-      break;
-    case "fixRegion":
-      fixRegion();
-      reply = { kind: "stepDone", y: window.scrollY };
-      break;
-    case "step":
-      window.scrollTo(0, window.scrollY + doc().clientHeight);
-      reply = { kind: "stepDone", y: window.scrollY };
-      break;
-    case "restore":
-      restore();
-      reply = { kind: "stepDone", y: window.scrollY };
-      break;
-  }
-  respond(reply);
-  return true;
-});

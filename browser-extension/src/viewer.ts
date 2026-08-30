@@ -19,6 +19,11 @@ function handleError(msg?: string): void {
 }
 
 async function render(job: CaptureJob): Promise<void> {
+  if (job.meta.warning) {
+    const el = document.getElementById("error")!;
+    el.textContent = job.meta.warning;
+    el.style.color = "#ffc078";
+  }
   const canvas = await stitch(job.frames, job.info);
   const view = document.getElementById("c") as HTMLCanvasElement;
   view.width = canvas.width;
