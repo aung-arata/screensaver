@@ -45,6 +45,25 @@ Built in **Go** — compiles to a single binary with no runtime dependencies.
 
 ---
 
+## Browser Extension (Chrome)
+
+A GoFullPage-style Chrome extension for capturing the full scrollable page of a browser. Use this when the main app can't capture browser content (e.g. full-page websites).
+
+- Source: [browser-extension/](./browser-extension/)
+- Load unpacked: `chrome://extensions` → Developer mode → Load unpacked → select `browser-extension/dist`
+
+**Build:**
+
+```bash
+cd browser-extension
+npm install
+npm run build   # or npm run watch
+```
+
+Captures viewport screenshots by step-scroll + `chrome.tabs.captureVisibleTab`, stitches them with DOM offsets (deterministically), and opens a viewer where you can download PNG/JPG/PDF.
+
+---
+
 ## Windows Installer
 
 A ready-to-use `.exe` installer for Windows is generated with

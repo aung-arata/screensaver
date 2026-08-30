@@ -1,0 +1,26 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Screensaver — Viewer</title>
+  <style>
+    body { font-family: system-ui; background: #333; margin: 0; padding: 16px; color: white; }
+    .bar { display: flex; gap: 10px; align-items: center; max-width: 900px; margin: 0 auto 14px; }
+    button { padding: 8px 14px; border: none; border-radius: 4px; background: #0b7285; color: white; cursor: pointer; }
+    #error { color: #ff6b6b; }
+    canvas#c { max-width: 100%; box-shadow: 0 2px 12px black; display: block; margin: 0 auto; }
+  </style>
+</head>
+<body>
+  <div class="bar">
+    <span id="title">Full page capture</span>
+    <button id="savePng">PNG</button>
+    <button id="saveJpg">JPG</button>
+    <button id="savePdf">PDF</button>
+    <button id="copy">Copy</button>
+    <span id="error"></span>
+  </div>
+  <canvas id="c" width="16" height="16"></canvas>
+  <script src="viewer.js"></script>
+</body>
+</html>
